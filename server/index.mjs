@@ -7,7 +7,7 @@ import { createServer } from 'node:http';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { compile8051, compilePic18, toolchainInfo } from './compilers/toolchains.mjs';
+import { compile8051, compilePic18, toolchainDiagnostics, toolchainInfo } from './compilers/toolchains.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.PORT ?? (process.argv.includes('--serve-dist') || process.env.SERVE_DIST === '1' ? 8080 : 5174));
@@ -41,6 +41,10 @@ async function readBody(req, limit = 512 * 1024) {
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   try {
+    if (url.pathname === '/api/toolchains' && url.searchParams.has('diag')) {
+      info = null; // re-detect on the next request too
+      return send(res, 200, await toolchainDiagnostics());
+    }
     if (url.pathname === '/api/toolchains') return send(res, 200, await getInfo());
     if (url.pathname === '/api/compile' && req.method === 'POST') {
       const body = await readBody(req);

@@ -3,7 +3,7 @@
 // diagnostics, a tool-style build log and debug info (line map + symbols).
 
 import { execFile } from 'node:child_process';
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -13,11 +13,14 @@ import { c18ToXc8, keilToSdcc } from './compat.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const INCLUDE = path.resolve(here, '..', 'include');
+const APP_ROOT = path.resolve(here, '..', '..');
+/** Compiler paths from the environment; relative ones are taken from the app root. */
+const envPath = (name) => (process.env[name] ? path.resolve(APP_ROOT, process.env[name].trim()) : null);
 
 function run(cmd, args, cwd, timeout = 90_000) {
   return new Promise((resolve) => {
     execFile(cmd, args, { cwd, timeout, windowsHide: true, maxBuffer: 8 << 20 }, (err, stdout, stderr) => {
-      resolve({ code: err ? (typeof err.code === 'number' ? err.code : 1) : 0, out: `${stdout}${stderr}`, timedOut: !!err?.killed });
+      resolve({ code: err ? (typeof err.code === 'number' ? err.code : 1) : 0, out: `${stdout}${stderr}`, timedOut: !!err?.killed, error: err && typeof err.code !== 'number' ? String(err.code ?? err.message) : null });
     });
   });
 }
@@ -45,10 +48,62 @@ function which(name) {
 
 export function locateToolchains() {
   const win = process.platform === 'win32';
-  const xc8 = process.env.XC8_CC ?? which('xc8-cc') ??
+  const xc8 = envPath('XC8_CC') ?? which('xc8-cc') ??
     (win ? findLatest('C:\\Program Files\\Microchip\\xc8', 'bin\\xc8-cc.exe') : findLatest('/opt/microchip/xc8', 'bin/xc8-cc'));
-  const sdcc = process.env.SDCC ?? which('sdcc') ?? (win && existsSync('C:\\Program Files\\SDCC\\bin\\sdcc.exe') ? 'C:\\Program Files\\SDCC\\bin\\sdcc.exe' : null);
+  const sdcc = envPath('SDCC') ?? which('sdcc') ?? (win && existsSync('C:\\Program Files\\SDCC\\bin\\sdcc.exe') ? 'C:\\Program Files\\SDCC\\bin\\sdcc.exe' : null);
   return { xc8, sdcc };
+}
+
+// ------------------------------------------------------------ diagnostics
+const mode = (p) => { try { return (statSync(p).mode & 0o777).toString(8).padStart(3, '0'); } catch { return null; } };
+
+/** Directory names (not files) below `dir`, so the layout on the host can be checked without shell access. */
+function listDirs(dir, depth, base = dir, out = []) {
+  if (depth < 0 || out.length >= 300) return out;
+  let entries = [];
+  try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return out; }
+  for (const e of entries) {
+    if (!e.isDirectory() || e.name === 'node_modules' || e.name === 'include') continue;
+    const p = path.join(dir, e.name);
+    out.push(path.relative(base, p));
+    listDirs(p, depth - 1, base, out);
+  }
+  return out;
+}
+
+/** Why XC8 is (not) usable: the environment the app sees, paths, permissions and the compiler's own output. */
+export async function toolchainDiagnostics() {
+  const { xc8 } = locateToolchains();
+  const d = {
+    appRoot: APP_ROOT,
+    env: { XC8_CC: process.env.XC8_CC ?? '(not set)', XC8_DFP: process.env.XC8_DFP ?? '(not set)' },
+    serverFolders: listDirs(path.join(APP_ROOT, 'server'), 5),
+    xc8: null, dfp: null, hints: [],
+  };
+  if (!xc8) d.hints.push('XC8_CC is not set for the app (Setup Node.js App -> Environment variables, then Save and Restart).');
+  else {
+    const exists = existsSync(xc8);
+    d.xc8 = { resolvedPath: xc8, exists, mode: mode(xc8) };
+    if (!exists) d.hints.push('XC8_CC points to a file that does not exist: compare resolvedPath with serverFolders.');
+    else {
+      const root = path.resolve(path.dirname(xc8), '..');
+      const notExec = [];
+      // Windows has no execute bit; the check only means something on the Linux host
+      for (const sub of process.platform === 'win32' ? [] : ['bin', 'pic/bin', 'pic-as/bin']) {
+        try { for (const f of readdirSync(path.join(root, sub))) { const m = mode(path.join(root, sub, f)); if (m && !f.endsWith('.xml') && !(parseInt(m, 8) & 0o100)) notExec.push(`${sub}/${f} (${m})`); } } catch { /* folder absent */ }
+      }
+      d.xc8.notExecutable = notExec;
+      if (notExec.length) d.hints.push('Some compiler programs lack execute permission: set 755 on every file in bin/, pic/bin/ and pic-as/bin/.');
+      const r = await run(xc8, ['--version'], tmpdir(), 20_000);
+      d.xc8.versionRun = { exitCode: r.code, error: r.error, output: r.out.slice(0, 800) };
+    }
+  }
+  const dfp = envPath('XC8_DFP');
+  if (dfp) {
+    d.dfp = { resolvedPath: dfp, exists: existsSync(dfp), has18F4550: existsSync(path.join(dfp, 'pic', 'include', 'proc', 'pic18f4550.h')) };
+    if (!d.dfp.has18F4550) d.hints.push('XC8_DFP must point at the device pack\'s "xc8" folder (the one containing pic/include/proc/pic18f4550.h).');
+  }
+  return d;
 }
 
 export async function toolchainInfo() {
@@ -112,7 +167,7 @@ export async function compilePic18(source, opts = {}) {
       : `note: application code offset 0x${offset.toString(16).toUpperCase()} (USB HID bootloader project setting).`;
     const args = ['-mcpu=18F4550', opt, '-std=c99', `-mcodeoffset=0x${offset.toString(16)}`, `-I${path.join(INCLUDE, 'pic18')}`, 'main.c', '-o', 'main.elf'];
     // XC8 v3+ ships without device files: point it at the PIC18Fxxxx device family pack's xc8/ folder
-    if (process.env.XC8_DFP) args.unshift(`-mdfp=${process.env.XC8_DFP}`);
+    if (process.env.XC8_DFP) args.unshift(`-mdfp=${envPath('XC8_DFP')}`);
     const r = await run(xc8, args, dir);
     const out = r.out.replaceAll(dir + path.sep, '').replaceAll(dir, '.');
     const diagnostics = parseDiagnostics(out, 'main.c');
