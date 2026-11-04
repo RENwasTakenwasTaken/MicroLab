@@ -51,19 +51,15 @@ export function Home() {
               {EXPERIMENTS.filter((e) => e.co === co).map((e) => {
                 const ready = e.status === 'ready';
                 return (
-                  <a key={e.id} className={`exp-card ${ready ? '' : 'planned'}`} href={ready ? `#/exp/${e.id}` : undefined} aria-disabled={!ready}>
+                  <a key={e.id} className={`exp-card ${ready ? '' : 'planned'}`} href={ready ? `#/exp/${e.id}` : undefined} aria-disabled={!ready} title={e.objective}>
                     <div className="exp-card-top">
                       <span className="exp-no">{String(e.no).padStart(2, '0')}</span>
-                      <span className={`tag ${e.arch === 'mcs51' ? 'blue' : e.arch === 'pic18' ? 'ok' : ''}`}>{e.mcu}</span>
-                      {sources[e.id] !== undefined && <span className="tag warn">edited</span>}
-                      {!ready && <span className="tag">planned</span>}
+                      <span className={`exp-chip ${e.arch}`}>{e.mcu}</span>
+                      {sources[e.id] !== undefined && <span className="exp-chip edited">edited</span>}
+                      {!ready && <span className="exp-chip">planned</span>}
                     </div>
                     <div className="exp-card-title">{e.title}</div>
-                    <div className="exp-card-obj">{e.objective}</div>
-                    <div className="exp-card-foot">
-                      <span>{e.toolchain}</span>
-                      {ready ? <span className="go">Open <Icon name="chevronRight" size={14} /></span> : <span className="dim">needs board photos</span>}
-                    </div>
+                    {ready && <span className="go" aria-hidden><Icon name="chevronRight" size={16} /></span>}
                   </a>
                 );
               })}

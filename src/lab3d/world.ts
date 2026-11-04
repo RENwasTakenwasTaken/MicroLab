@@ -63,7 +63,7 @@ function buildSockets(): SocketDef[] {
       yaw: -((p.rot * Math.PI) / 180) - Math.PI / 2, frcRole: name.startsWith('PORT') ? 'port' : 'peripheral',
     });
   }
-  out.push({ id: 'usb:board', kind: 'usb', label: 'USB-B (PIC)', pos: boardToWorld(-3, 142, 6), yaw: Math.PI / 2 });
+  out.push({ id: 'usb:board', kind: 'usb', label: 'USB-B (PIC)', pos: boardToWorld(7, 130.5, MODULE_TOP + 6), yaw: Math.PI / 2 });
   HEADERS.forEach((hd, hi) => {
     const n = hd.labels.length;
     hd.labels.forEach((lab, k) => {

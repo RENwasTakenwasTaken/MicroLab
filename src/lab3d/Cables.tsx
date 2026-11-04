@@ -22,10 +22,28 @@ export function plugPosition(p: Plug, carrying: string | null): THREE.Vector3 {
   return new THREE.Vector3(...p.rest);
 }
 
-/** Direction the cable leaves a plug in. */
-function approach(p: Plug, carrying: string | null): THREE.Vector3 {
-  if (p.attachedTo === 'usb:board' && p.id !== carrying) return new THREE.Vector3(0, 0.25, -1).normalize();
-  return new THREE.Vector3(0, 1, 0);
+const PROBE_LEN = 64; // tip -> back of the probe / lead handle, along local +Y
+const USB_LEN = 40; // metal front -> back of the USB-B moulding, along local -Z
+const PROBE_TILT = Math.PI / 2.3;
+
+/**
+ * Plug orientation. FRC and USB plugs turn to their socket; probes stand upright
+ * in a test point and otherwise lie tip-forward with the back towards the instrument.
+ */
+function plugEuler(p: Plug, carrying: string | null): THREE.Euler {
+  const s = p.attachedTo && p.id !== carrying ? SOCKET[p.attachedTo] : null;
+  if (p.kind === 'frc') return new THREE.Euler(0, s ? s.yaw : 0.3, 0);
+  if (p.kind === 'usb') return new THREE.Euler(0, s ? s.yaw : 0, 0);
+  return new THREE.Euler(s ? 0 : -PROBE_TILT, 0, 0);
+}
+
+/** Where the cable leaves the back of a round-cable plug, and the direction it leaves in. */
+function cableExit(p: Plug, carrying: string | null) {
+  const e = plugEuler(p, carrying);
+  const back = p.kind === 'usb' ? new THREE.Vector3(0, 0, -USB_LEN) : new THREE.Vector3(0, PROBE_LEN, 0);
+  const dir = back.clone().normalize().applyEuler(e);
+  dir.y += 0.35;
+  return { at: plugPosition(p, carrying).add(back.applyEuler(e)), dir: dir.normalize() };
 }
 
 // ---------------------------------------------------------- carry control
@@ -107,10 +125,7 @@ function PlugMesh({ p }: { p: Plug }) {
     if (!g) return;
     const pos = plugPosition(p, carrying);
     g.position.copy(pos);
-    const s = p.attachedTo && !isCarried ? SOCKET[p.attachedTo] : null;
-    if (p.kind === 'frc') g.rotation.set(0, s ? s.yaw : 0.3, 0);
-    else if (p.kind === 'usb') g.rotation.set(0, 0, 0);
-    else g.rotation.set(s ? 0 : Math.PI / 2.3, 0, 0);
+    g.rotation.copy(plugEuler(p, carrying));
   });
   // the carried plug must not intercept the clicks aimed at the connector below it
   useEffect(() => {
@@ -191,13 +206,12 @@ function RoundCable({ from, plugId, color, radius = 2.2, fixedDir = new THREE.Ve
     const st = useBench.getState();
     const p = st.plugs[plugId];
     if (!p || !mesh.current) return;
-    const end = plugPosition(p, st.carrying);
-    const tip = p.kind === 'probe' ? end.clone().add(new THREE.Vector3(0, p.attachedTo && st.carrying !== p.id ? 64 : 0, 0)) : end;
-    const k = `${tip.x.toFixed(1)},${tip.y.toFixed(1)},${tip.z.toFixed(1)}`;
+    const exit = cableExit(p, st.carrying);
+    const k = `${exit.at.toArray().map((v) => v.toFixed(1))}|${exit.dir.toArray().map((v) => v.toFixed(2))}`;
     if (k !== key.current) {
       key.current = k;
       const a = new THREE.Vector3(...from);
-      const curve = sagCurve(a, fixedDir, tip, p.kind === 'usb' ? approach(p, st.carrying).negate().setY(0.4).normalize() : new THREE.Vector3(0, 1, 0));
+      const curve = sagCurve(a, fixedDir, exit.at, exit.dir);
       mesh.current.geometry.dispose();
       mesh.current.geometry = new THREE.TubeGeometry(curve, 64, radius, 8, false);
     }

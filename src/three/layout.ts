@@ -183,7 +183,6 @@ export const PARTS: Part[] = [
   { kind: 'relimate', n: 2, x: 81.5, y: 180, rot: 90, name: 'CAN' },
   { kind: 'capC', x: 75, y: 178, color: '#d08a2a' },
 
-  { kind: 'usbB', x: 5.5, y: 142, rot: 180, name: 'USB (PIC)', info: 'Type-B USB to the PIC18F4550 (USB HID bootloader). Plug the cable from the lab PC here.' },
   { kind: 'screw', x: 136, y: 185 },
   { kind: 'screw', x: 3, y: 185 },
 
@@ -213,6 +212,8 @@ export const PARTS: Part[] = [
   { onModule: true, kind: 'led', color: 'red', d: 3, x: 19, y: 113, signal: 'POWER', name: 'LP1 POWER' },
   { onModule: true, kind: 'capC', x: 6, y: 106, color: '#3a7bd5' },
   { onModule: true, kind: 'jumper', x: 2, y: 118.3, n: 3, rot: 90, cap: 1, name: 'EXT / USB' },
+  // opening faces the module's left edge (towards the lab PC); exact spot on the module is an approximation
+  { onModule: true, kind: 'usbB', x: 7, y: 134.5, rot: -90, name: 'USB (PIC)', info: 'Type-B USB to the PIC18F4550 (USB HID bootloader). Plug the cable from the lab PC here. Position on the module is approximate (unverified).' },
   { onModule: true, kind: 'jumper', x: 7, y: 118.3, n: 3, rot: 90, cap: 1, name: 'RB0' },
   { onModule: true, kind: 'jumper', x: 12, y: 118.3, n: 3, rot: 90, cap: 1, name: 'RB1' },
   { onModule: true, kind: 'header', n: 8, x: 26.8, y: 119.6, rot: 0, name: 'PORT-A pins' },
@@ -289,10 +290,10 @@ export const LABELS: SilkLabel[] = [
   { text: 'ANALOG INP', x: 69.8, y: 152, size: 1.8, rot: V, bold: true },
   { text: 'PIC AN0', x: 69.5, y: 167, size: 1.3, rot: V },
   { text: 'CAN INTERFACE', x: 84.6, y: 156, size: 1.8, rot: V, bold: true },
-  { text: 'USB', x: 13, y: 132, size: 1.5, rot: V },
 
   // ---- PIC module (text is upside-down in the photo)
   { text: 'PIC uC Development Board', x: 46, y: 136.6, size: 2.2, rot: 180, bold: true, onModule: true },
+  { text: 'USB', x: 7, y: 124.6, size: 1.5, rot: 180, onModule: true },
   { text: 'SMART LOGIC TECHNOLOGIES', x: 49, y: 78.2, size: 1.9, rot: 180, bold: true, onModule: true },
   { text: 'EXCEL PIC V1.0', x: 55, y: 76.2, size: 1.7, rot: 180, onModule: true },
   { text: 'PORT-B', x: 29, y: 68.6, size: 1.6, rot: 180, onModule: true },
