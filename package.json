@@ -1,0 +1,43 @@
+{
+  "name": "virtual-mcu-lab",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Virtual Microcontroller Laboratory - PIC18F4550 & 8051 practicals with real compilers and instruction-level emulation",
+  "scripts": {
+    "dev": "concurrently -k -n server,web -c blue,green \"npm:server\" \"npm:web\"",
+    "web": "vite",
+    "server": "node server/index.mjs",
+    "build": "tsc -p tsconfig.json --noEmit && vite build",
+    "start": "node server/index.mjs --serve-dist",
+    "test:sim": "node tests/run-all.mjs",
+    "test:debug": "node tests/debugger.mjs",
+    "test:ui": "node tests/ui-smoke.mjs",
+    "test": "node tests/run-all.mjs && node tests/debugger.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@react-three/drei": "^10.7.9",
+    "@react-three/fiber": "^9.8.2",
+    "monaco-editor": "^0.52.2",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-resizable-panels": "^2.1.9",
+    "three": "^0.170.0",
+    "zustand": "^5.0.16"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/three": "^0.170.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "concurrently": "^9.2.5",
+    "playwright-core": "^1.64.1",
+    "typescript": "5.7",
+    "vite": "^6.4.5"
+  },
+  "engines": {
+    "node": ">=22.6"
+  }
+}

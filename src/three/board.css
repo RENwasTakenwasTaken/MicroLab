@@ -1,0 +1,30 @@
+.board-view { position: relative; width: 100%; height: 100%; overflow: hidden; background: #0f1318; touch-action: none; }
+.board-toolbar { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; gap: 8px; flex-wrap: wrap; pointer-events: none; }
+.board-toolbar .seg { pointer-events: auto; display: flex; background: rgba(18, 22, 28, 0.85); border: 1px solid var(--line); border-radius: 7px; padding: 2px; backdrop-filter: blur(6px); }
+.seg-btn { border: 0; background: none; color: var(--fg-2); height: 24px; padding: 0 9px; border-radius: 5px; cursor: pointer; font-size: 11.5px; display: inline-flex; align-items: center; gap: 5px; }
+.seg-btn:hover { color: var(--fg-0); background: var(--bg-3); }
+.view-seg .view-toggle { color: var(--fg-1); font-weight: 600; }
+.view-seg .view-toggle b { font-weight: 500; color: var(--accent); margin-left: 2px; }
+.view-seg .view-toggle svg:last-child { width: 11px; height: 11px; opacity: 0.7; }
+.view-seg.open .view-toggle { border-right: 1px solid var(--line); border-radius: 5px 0 0 5px; margin-right: 2px; }
+.view-seg.open .seg-btn:not(.view-toggle) { animation: seg-in 0.14s ease-out; }
+@keyframes seg-in { from { opacity: 0; transform: translateX(-4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .view-seg.open .seg-btn { animation: none; } }
+.seg-btn.on { color: var(--accent); background: var(--accent-soft); }
+.seg-btn svg { width: 13px; height: 13px; }
+.board-hint { position: absolute; bottom: 6px; left: 10px; right: 10px; font-size: 10.5px; color: var(--fg-3); pointer-events: none; text-shadow: 0 1px 2px #000; }
+.board-tip {
+  position: absolute; z-index: 30; max-width: 280px; pointer-events: none;
+  background: rgba(13, 16, 20, 0.95); border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+.tip-name { font-weight: 600; font-size: 12px; color: var(--fg-0); }
+.tip-info { font-size: 11px; color: var(--fg-2); margin-top: 3px; white-space: pre-line; }
+.tip-live { margin: 6px 0 0; font: 11px var(--mono); color: var(--accent); white-space: pre; }
+.board-label {
+  font: 600 10px var(--sans); padding: 2px 6px; border-radius: 4px; white-space: nowrap;
+  background: rgba(13, 16, 20, 0.86); color: var(--fg-2); border: 1px solid var(--line);
+}
+.board-label.on { color: var(--accent); border-color: rgba(63, 182, 139, 0.5); }
+.board-label.warn { color: var(--amber); border-color: rgba(232, 176, 74, 0.45); }
+.board-label b { font-weight: 600; color: var(--fg-0); }

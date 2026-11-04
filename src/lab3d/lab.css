@@ -1,0 +1,77 @@
+.lab-view { background: #cdbfb1; }
+.lab-view .board-hint { color: #4a4036; text-shadow: none; }
+
+/* ---------- coding mode: editor laid over the monitor ---------- */
+.pc-overlay {
+  position: absolute; z-index: 40; display: flex; flex-direction: column;
+  background: #12161c; border: 1px solid #000; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04);
+  animation: pc-in 0.25s ease-out; overflow: hidden;
+}
+@keyframes pc-in { from { opacity: 0; } to { opacity: 1; } }
+.pc-title { display: flex; align-items: center; gap: 10px; height: 2.3em; padding: 0 0 0 10px; background: #1d232c; flex: none; }
+.pc-app { font-weight: 700; color: #e6ebf2; }
+.pc-file { color: var(--fg-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pc-close { margin-left: auto; height: 100%; width: 3.2em; border: 0; background: #c03b3b; color: #fff; cursor: pointer; display: grid; place-items: center; }
+.pc-close:hover { background: #e04848; }
+.pc-close svg { width: 1.3em; height: 1.3em; }
+.pc-toolbar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #171c23; border-bottom: 1px solid #222934; flex: none; flex-wrap: wrap; }
+.pc-upload { display: inline-flex; align-items: center; gap: 6px; height: 2.1em; padding: 0 14px; border: 1px solid var(--accent); background: var(--accent-2); color: #fff; font-weight: 700; letter-spacing: 0.04em; border-radius: 4px; cursor: pointer; }
+.pc-upload:hover:not(:disabled) { background: var(--accent); }
+.pc-upload:disabled { opacity: 0.5; cursor: default; }
+.pc-upload svg { width: 1.1em; height: 1.1em; }
+.pc-btn { height: 2.1em; padding: 0 10px; border: 1px solid var(--line); background: var(--bg-3); color: var(--fg-1); border-radius: 4px; cursor: pointer; }
+.pc-btn:disabled { opacity: 0.4; cursor: default; }
+.pc-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 0.86em; padding: 2px 8px; border-radius: 10px; background: var(--bg-3); color: var(--fg-2); }
+.pc-chip.ok { color: var(--accent); background: var(--accent-soft); }
+.pc-chip.blue { color: var(--blue); }
+.pc-build { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; letter-spacing: 0.04em; }
+.pc-build svg { width: 1.05em; height: 1.05em; }
+.pc-phase.built { color: var(--accent); }
+.pc-font { display: inline-flex; gap: 4px; }
+.pc-font .pc-btn { min-width: 2.4em; padding: 0 6px; font-weight: 600; }
+.pc-phase { margin-left: auto; font-size: 0.9em; color: var(--fg-2); }
+.pc-phase.done { color: var(--accent); }
+.pc-phase.error, .pc-phase.compile-error { color: var(--red); }
+.pc-phase.waiting, .pc-phase.programming, .pc-phase.erasing, .pc-phase.verifying { color: var(--amber); }
+.pc-editor { flex: 1; min-height: 0; }
+.pc-editor .editor-tabs { height: 1.9em; }
+.pc-output { flex: none; height: 26%; min-height: 70px; border-top: 1px solid #222934; background: #0c0f12; display: flex; flex-direction: column; }
+.pc-progress { height: 5px; background: #26303d; flex: none; }
+.pc-progress > div { height: 100%; background: var(--blue); transition: width 0.1s; }
+.pc-log { flex: 1; overflow: auto; padding: 5px 10px; font: 0.88em/1.45 var(--mono); color: var(--fg-1); }
+
+/* ---------- workflow guide ---------- */
+.wf { position: absolute; top: 44px; right: 10px; width: 300px; z-index: 20; background: rgba(13, 16, 20, 0.92); border: 1px solid var(--line); border-radius: 9px; font-size: 12px; box-shadow: 0 8px 26px rgba(0, 0, 0, 0.35); backdrop-filter: blur(6px); }
+.wf-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 6px 6px 12px; border-bottom: 1px solid var(--line-soft); }
+.wf ol { list-style: none; margin: 0; padding: 8px 12px; display: flex; flex-direction: column; gap: 8px; }
+.wf ol > li { position: relative; padding-left: 26px; color: var(--fg-2); }
+.wf ol > li .dot { position: absolute; left: 0; top: 0; width: 17px; height: 17px; border-radius: 50%; border: 1.5px solid var(--fg-3); display: grid; place-items: center; font-size: 10px; color: #fff; }
+.wf ol > li.done { color: var(--fg-1); }
+.wf ol > li.done .dot { background: var(--accent-2); border-color: var(--accent); }
+.wf ol > li.active { color: var(--fg-0); }
+.wf ol > li.active .dot { border-color: var(--amber); box-shadow: 0 0 0 3px rgba(232, 176, 74, 0.2); }
+.wf a { color: var(--blue); cursor: pointer; text-decoration: underline; }
+.wf-sub { margin: 4px 0 0; padding-left: 14px; color: var(--fg-3); }
+.wf-sub li.ok { color: var(--accent); }
+.wf-sub li.ok::marker { content: '✓ '; }
+.wf-ok { color: var(--accent); display: block; margin-top: 3px; }
+.wf-err { color: var(--red); }
+.wf-phase { margin-left: 4px; font: 600 10px var(--mono); padding: 1px 5px; border-radius: 4px; background: var(--bg-3); color: var(--amber); }
+.wf-phase.done { color: var(--accent); }
+.wf-phase.error, .wf-phase.compile-error { color: var(--red); }
+.wf-foot { padding: 7px 12px; border-top: 1px solid var(--line-soft); color: var(--fg-2); }
+.wf-toggle { position: absolute; top: 44px; right: 10px; z-index: 20; display: inline-flex; gap: 6px; align-items: center; background: rgba(13, 16, 20, 0.9); color: var(--fg-1); border: 1px solid var(--line); border-radius: 7px; padding: 5px 10px; cursor: pointer; }
+.wf-toggle svg { width: 14px; height: 14px; }
+
+.carry-hint { position: absolute; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: 25; background: rgba(13, 16, 20, 0.92); color: var(--fg-1); border: 1px solid var(--blue); padding: 7px 14px; border-radius: 8px; font-size: 12.5px; white-space: nowrap; }
+.carry-hint b { color: var(--blue); }
+.lab-toast { position: absolute; left: 50%; top: 46px; transform: translateX(-50%); z-index: 30; padding: 7px 14px; border-radius: 8px; font-size: 12.5px; background: rgba(13, 16, 20, 0.94); border: 1px solid var(--line); color: var(--fg-0); animation: pc-in 0.2s; }
+.lab-toast.ok { border-color: var(--accent); }
+.lab-toast.err { border-color: var(--red); color: #ffd0d0; }
+
+.usb-badge { font: 600 10.5px var(--sans); padding: 2px 7px; border-radius: 5px; white-space: nowrap; background: rgba(13, 16, 20, 0.86); border: 1px solid var(--line); color: var(--fg-2); }
+.usb-badge.connected { color: var(--accent); border-color: rgba(63, 182, 139, 0.5); }
+.usb-badge.uploading { color: #8cc2ff; border-color: var(--blue); }
+.usb-badge.completed { color: var(--accent); border-color: var(--accent); }
+.usb-badge.error { color: var(--red); border-color: var(--red); }
+.held-badge { font: 700 9.5px var(--sans); padding: 1px 5px; border-radius: 4px; background: var(--amber); color: #1a1205; white-space: nowrap; }

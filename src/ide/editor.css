@@ -1,0 +1,12 @@
+.editor-wrap { display: flex; flex-direction: column; height: 100%; background: #12161c; }
+.editor-tabs { display: flex; align-items: stretch; height: 32px; border-bottom: 1px solid var(--line-soft); background: var(--bg-1); flex: none; }
+.editor-tab { display: flex; align-items: center; gap: 7px; padding: 0 14px; font: 12px var(--mono); color: var(--fg-2); border-right: 1px solid var(--line-soft); }
+.editor-tab.on { color: var(--fg-0); background: #12161c; box-shadow: inset 0 2px 0 var(--accent); }
+.editor-tab .modified { color: var(--amber); font-size: 10px; }
+.editor-tab-meta { margin-left: auto; align-self: center; padding: 0 12px; font-size: 11px; color: var(--fg-3); }
+.lang-dot { width: 8px; height: 8px; border-radius: 2px; background: var(--blue); }
+.lang-dot.mcs51 { background: var(--violet); }
+.editor-host { flex: 1; min-height: 0; }
+.bp-glyph { background: var(--red); border-radius: 50%; width: 10px !important; height: 10px !important; margin: 5px 0 0 5px; box-shadow: 0 0 6px rgba(239, 91, 91, 0.6); }
+.exec-line { background: rgba(232, 176, 74, 0.16); border-left: 2px solid var(--amber); }
+.exec-glyph::after { content: '▶'; color: var(--amber); font-size: 11px; margin-left: 4px; }
