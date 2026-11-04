@@ -111,6 +111,8 @@ export async function compilePic18(source, opts = {}) {
         : `warning: reset vector remapped to 0x${remap.addr.toString(16).toUpperCase()} but the board bootloader starts the application at 0x1000.`
       : `note: application code offset 0x${offset.toString(16).toUpperCase()} (USB HID bootloader project setting).`;
     const args = ['-mcpu=18F4550', opt, '-std=c99', `-mcodeoffset=0x${offset.toString(16)}`, `-I${path.join(INCLUDE, 'pic18')}`, 'main.c', '-o', 'main.elf'];
+    // XC8 v3+ ships without device files: point it at the PIC18Fxxxx device family pack's xc8/ folder
+    if (process.env.XC8_DFP) args.unshift(`-mdfp=${process.env.XC8_DFP}`);
     const r = await run(xc8, args, dir);
     const out = r.out.replaceAll(dir + path.sep, '').replaceAll(dir, '.');
     const diagnostics = parseDiagnostics(out, 'main.c');

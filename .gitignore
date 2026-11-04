@@ -9,3 +9,7 @@ release
 *.zip
 .env*
 .ftp-deploy-sync-state.json
+
+# local compiler bundles (never commit Microchip toolchains)
+xc8-*/
+*.atpack
