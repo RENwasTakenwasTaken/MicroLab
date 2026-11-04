@@ -1,0 +1,83 @@
+# Push to main -> type-check and build on GitHub -> upload the changed files to the
+# cPanel Node.js app over FTPS -> restart the app (Passenger) -> check the live site.
+#
+# Repository secrets (Settings -> Secrets and variables -> Actions):
+#   FTP_SERVER    FTP host from cPanel "FTP Accounts -> Configure FTP Client"
+#   FTP_USERNAME  e.g. deploy@erpsolution26.com (its directory = the app root)
+#   FTP_PASSWORD  that FTP account's password
+#
+# The server needs no `npm install`: the backend uses only Node built-ins and the
+# frontend arrives already built in dist/. Compiler paths (XC8_CC, SDCC) stay in
+# the cPanel app's environment variables and are never touched by a deploy.
+
+name: Deploy to cPanel
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# concurrency:
+#   group: deploy
+#   cancel-in-progress: false
+
+env:
+  SITE: https://microlab.erpsolution26.com
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Type-check and build
+        run: npm run build
+
+      - name: Stage release
+        run: |
+          mkdir -p release restart
+          cp -r dist server app.cjs package.json release/
+          echo "${GITHUB_SHA} $(date -u +%FT%TZ)" > restart/restart.txt
+
+      - name: Upload changed files
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          # "loose" accepts the host's shared TLS certificate when FTP_SERVER is the domain
+          # rather than the server's own hostname; the connection is still encrypted.
+          security: loose
+          local-dir: ./release/
+          server-dir: ./
+
+      # uploaded last, so Passenger restarts only after every file is in place
+      - name: Restart the app
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          security: loose
+          local-dir: ./restart/
+          server-dir: ./tmp/
+
+      - name: Check the live site
+        run: |
+          for i in 1 2 3 4 5 6; do
+            if curl -fsS -m 30 "$SITE/api/toolchains"; then echo; break; fi
+            [ "$i" = 6 ] && { echo "::error::$SITE/api/toolchains did not respond"; exit 1; }
+            sleep 10
+          done
+          curl -fsS -m 30 -o /dev/null -w "frontend: HTTP %{http_code}\n" "$SITE/"
