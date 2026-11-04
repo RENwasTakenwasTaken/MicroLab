@@ -1,6 +1,6 @@
 // Virtual MCU Lab build server.
 //   GET  /api/toolchains        -> detected compilers
-//   POST /api/compile           -> { target: 'pic18f4550' | '8051', source, options }
+//   POST /api/compile           -> { target: 'pic18f4550' | '8051', sourceB64 (or source), options }
 // With --serve-dist it also serves the production frontend from ./dist.
 
 import { createServer } from 'node:http';
@@ -48,6 +48,8 @@ const server = createServer(async (req, res) => {
     if (url.pathname === '/api/toolchains') return send(res, 200, await getInfo());
     if (url.pathname === '/api/compile' && req.method === 'POST') {
       const body = await readBody(req);
+      // the web app sends the source base64-encoded (sourceB64) so host firewalls do not mistake C for an attack
+      if (typeof body.sourceB64 === 'string') body.source = Buffer.from(body.sourceB64, 'base64').toString('utf8');
       if (typeof body.source !== 'string') return send(res, 400, { error: 'source missing' });
       const tc = await getInfo();
       const result = await enqueue(() =>
