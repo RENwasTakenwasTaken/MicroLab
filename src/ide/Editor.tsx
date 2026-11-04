@@ -158,7 +158,7 @@ export function CodeEditor({ expId }: { expId: string }) {
           main.c
           {useLab.getState().sources[expId] !== undefined && <span className="modified" title="Modified from the reference program">●</span>}
         </div>
-        <div className="editor-tab-meta">{exp?.arch === 'mcs51' ? 'Keil C51 dialect' : 'XC8 (C99)'} · {exp?.mcu}</div>
+        <div className="editor-tab-meta">{exp?.arch === 'mcs51' ? 'Keil C51 dialect' : 'HI-TECH / C18 conventions'} · {exp?.mcu}</div>
       </div>
       <div className="editor-host" ref={host} />
     </div>

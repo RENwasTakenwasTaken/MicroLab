@@ -3,3 +3,9 @@ dist
 .tmp
 *.log
 tests/screenshots
+
+# deployment: staged release folder, manual upload bundles, local credentials
+release
+*.zip
+.env*
+.ftp-deploy-sync-state.json

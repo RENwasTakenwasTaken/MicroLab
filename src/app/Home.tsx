@@ -17,7 +17,7 @@ export function Home() {
         <div className="brand">
           <div className="brand-mark"><Icon name="chip" size={20} /></div>
           <div>
-            <div className="brand-name">PICT μLab</div>
+            <div className="brand-name">PICT KA μLab</div>
             <div className="brand-sub"></div>
           </div>
           
