@@ -38,6 +38,29 @@ class BoardAudio {
     this.lastRelay = b.relaySwitches;
   }
 
+  /** Soft sine tones: a two-note "tick" when a workflow task completes, a rising arpeggio when all are done. */
+  chime(kind: 'step' | 'done' = 'step') {
+    const ctx = this.ensure();
+    if (!ctx || this.muted) return;
+    ctx.resume().catch(() => {});
+    const notes = kind === 'step' ? [880, 1318.5] : [523.25, 659.25, 783.99, 1046.5];
+    const gap = kind === 'step' ? 0.09 : 0.12;
+    const tail = kind === 'step' ? 0.35 : 0.7;
+    notes.forEach((f, i) => {
+      const t = ctx.currentTime + 0.02 + i * gap;
+      const osc = ctx.createOscillator();
+      const env = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = f;
+      env.gain.setValueAtTime(0, t);
+      env.gain.linearRampToValueAtTime(0.06, t + 0.015);
+      env.gain.exponentialRampToValueAtTime(0.0001, t + tail);
+      osc.connect(env).connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + tail + 0.05);
+    });
+  }
+
   private click() {
     const ctx = this.ctx!;
     const len = Math.floor(ctx.sampleRate * 0.012);

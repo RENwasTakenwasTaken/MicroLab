@@ -11,7 +11,7 @@ import { sim } from '../app/sim.ts';
 import { useHover } from '../three/interactive.tsx';
 import { CanvasScreen, drawDmm, drawGen, drawScope, type ScopeView } from './screens.ts';
 import { genValue, nodeDc, nodeFreq, nodeTrace, plugNode, triggerTime } from './signals.ts';
-import { DMM, SCOPE, SIGGEN } from './world.ts';
+import { DMM, SCOPE, SIGGEN, SOCKET } from './world.ts';
 
 const carrying = () => !!useBench.getState().carrying;
 
@@ -95,7 +95,12 @@ export function Oscilloscope() {
 
   const hover = useHover({
     name: 'Tektronix TDS1002 oscilloscope',
-    info: 'Connect the CH1/CH2 probes to header pins. Knobs: click +, right-click −. AUTOSET fits the CH1 signal.',
+    info: 'Each probe\'s crocodile clip holds a male-to-female jumper: put its female end on a header pin, and the ground jumper on GND (UART header). Knobs: click +, right-click −. AUTOSET fits the CH1 signal.',
+    live: () => {
+      const g = plugNode('scope:gnd')?.kind === 'gnd';
+      const ch = (id: string) => { const s = useBench.getState().plugs[id]?.attachedTo; return s ? SOCKET[s]?.label ?? s : '—'; };
+      return `CH1: ${ch('ch1')}  ·  CH2: ${ch('ch2')}\nground: ${g ? 'connected' : 'NOT connected (no trace from the board)'}`;
+    },
   });
 
   useFrame(() => {
@@ -105,7 +110,10 @@ export function Oscilloscope() {
     const sc = useBench.getState().scope;
     const gen = useBench.getState().gen;
     const f = sim.latest;
-    const n1 = plugNode('ch1'), n2 = plugNode('ch2');
+    // board pins only read against the board's ground: the probe ground jumper must sit on a GND pin
+    const grounded = plugNode('scope:gnd')?.kind === 'gnd';
+    const viaGnd = (n: ReturnType<typeof plugNode>) => (n && (n.kind === 'gen' || grounded) ? n : null);
+    const n1 = viaGnd(plugNode('ch1')), n2 = viaGnd(plugNode('ch2'));
     const span = sc.sdiv * 10;
     let view: ScopeView;
     if (!sc.running && frozen.current) view = { ...frozen.current, vdiv: sc.vdiv, running: false };
@@ -142,7 +150,8 @@ export function Oscilloscope() {
   const setScope = (p: Partial<ReturnType<typeof useBench.getState>['scope']>) => useBench.setState({ scope: { ...useBench.getState().scope, ...p } });
   const stepIn = (arr: number[], v: number, dir: 1 | -1) => arr[Math.max(0, Math.min(arr.length - 1, arr.indexOf(nearest(arr, v)) + dir))];
   const autoset = () => {
-    const n1 = plugNode('ch1');
+    const raw = plugNode('ch1');
+    const n1 = raw && (raw.kind === 'gen' || plugNode('scope:gnd')?.kind === 'gnd') ? raw : null;
     const fq = nodeFreq(n1, sim.latest, useBench.getState().gen);
     const sc = useBench.getState().scope;
     const sdiv = fq > 0 ? nearest(SDIV_STEPS, 3 / fq / 10) : sc.sdiv;

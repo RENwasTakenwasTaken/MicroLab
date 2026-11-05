@@ -47,14 +47,14 @@ function Problems() {
 function Programmer() {
   const up = useBench((s) => s.upload);
   const log = up.log;
-  const busy = up.phase === 'erasing' || up.phase === 'programming' || up.phase === 'verifying' || up.phase === 'waiting';
+  const busy = up.phase === 'erasing' || up.phase === 'programming' || up.phase === 'verifying';
   const ref = useRef<HTMLPreElement>(null);
   useEffect(() => { ref.current?.scrollTo(0, ref.current.scrollHeight); }, [log]);
   if (!log.length) return <div className="empty">Click the lab computer, then UPLOAD to program the board through the USB HID bootloader.</div>;
   return (
     <pre className="console" ref={ref}>
       <div className="c-dim">*****************************************************</div>
-      {log.map((l, i) => <div key={i} className={/complete|successful/i.test(l) ? 'c-ok' : /error|failed|aborted/i.test(l) ? 'c-err' : /warning|→/.test(l) ? 'c-warn' : ''}>{l || ' '}</div>)}
+      {log.map((l, i) => <div key={i} className={/complete|successful/i.test(l) ? 'c-ok' : /error|failed|aborted|not detected/i.test(l) ? 'c-err' : /warning|→/.test(l) ? 'c-warn' : ''}>{l || ' '}</div>)}
       {busy && <div className="pulse">▍</div>}
     </pre>
   );

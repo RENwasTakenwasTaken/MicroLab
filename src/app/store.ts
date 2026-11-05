@@ -31,6 +31,7 @@ export interface SimLogEntry { level: LogLevel; msg: string; t: number; wall: nu
 const LS_KEY = 'vlab.sources.v1';
 const LS_BP = 'vlab.breakpoints.v1';
 const LS_FONT = 'vlab.editorFont.v1';
+const LS_PERF = 'vlab.perfMode.v1';
 export const EDITOR_FONT = { min: 9, max: 28, default: 13 };
 const load = <T,>(k: string, d: T): T => { try { const v = localStorage.getItem(k); return v ? (JSON.parse(v) as T) : d; } catch { return d; } };
 const save = (k: string, v: unknown) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage unavailable */ } };
@@ -39,8 +40,10 @@ export function boardConfigFor(expId: string): PicBoardConfig | Mcs51BoardConfig
   const exp = getExperiment(expId);
   if (exp?.arch === 'mcs51') return defaultMcs51Config();
   const cfg = defaultPicBoardConfig();
-  if (exp?.board?.cables) Object.assign(cfg.cables, exp.board.cables);
-  if (exp?.board?.dips) for (const [k, v] of Object.entries(exp.board.dips)) (cfg.dips as Record<string, boolean[]>)[k] = [...v!];
+  // the bench starts as the student finds it in the lab: no ribbon or motor wire plugged in and
+  // every DIP switch OFF. exp.board lists what has to be set up (workflow steps).
+  for (const bank of Object.values(cfg.dips)) bank.fill(false);
+  cfg.motorLink = 0;
   return cfg;
 }
 
@@ -75,6 +78,12 @@ interface LabState {
   speed: number;
   /** code editor font size (px), A+/A- on the lab computer */
   editorFont: number;
+  /**
+   * 3D performance mode: the board's static parts are merged into a few meshes, resistors /
+   * capacitors / diodes are left out, shadows are drawn once instead of every frame and the
+   * scene renders at 1x pixel density.
+   */
+  perfMode: boolean;
   toolchains: { xc8: { version: string } | null; sdcc: { version: string } | null } | null;
 
   setRoute(r: LabState['route']): void;
@@ -85,6 +94,7 @@ interface LabState {
   pushLog(entries: SimLogEntry[]): void;
   appendUart(text: string): void;
   setEditorFont(px: number): void;
+  setPerfMode(on: boolean): void;
 }
 
 export const useLab = create<LabState>((set, get) => ({
@@ -115,6 +125,7 @@ export const useLab = create<LabState>((set, get) => ({
   showCables: true,
   speed: 1,
   editorFont: load<number>(LS_FONT, EDITOR_FONT.default),
+  perfMode: load<boolean>(LS_PERF, false),
   toolchains: null,
 
   setRoute: (route) => set({ route }),
@@ -150,6 +161,10 @@ export const useLab = create<LabState>((set, get) => ({
     const editorFont = Math.max(EDITOR_FONT.min, Math.min(EDITOR_FONT.max, Math.round(px)));
     save(LS_FONT, editorFont);
     set({ editorFont });
+  },
+  setPerfMode: (perfMode) => {
+    save(LS_PERF, perfMode);
+    set({ perfMode });
   },
 }));
 

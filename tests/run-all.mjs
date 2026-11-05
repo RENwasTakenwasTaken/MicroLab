@@ -60,7 +60,7 @@ const lcdText = (snap) => snap.lcd.rows.map((r) => r.map((c) => (c < 0 ? ' ' : c
 {
   console.log('Experiment 2 — switches, LEDs, relay, buzzer');
   const r = await build('exp2_pic_io.c');
-  const { board, mcu, runFor, frame, flash } = picRig((c) => { c.cables.LBANK = 3; });
+  const { board, mcu, runFor, frame, flash } = picRig((c) => { c.cables.LBANK = 3; c.dips.periph = [false, false, false, true, true, false]; });
   flash(r.hex);
   runFor(0.1);
   let f = frame();
@@ -103,14 +103,14 @@ const lcdText = (snap) => snap.lcd.rows.map((r) => r.map((c) => (c < 0 ? ' ' : c
   let f = frame();
   const p = mcu.peripheralState().pwm[0];
   check('PWM 5 kHz', Math.abs(p.freq - 5000) < 1, `${p.freq.toFixed(0)} Hz`);
-  check('initial duty 50 %', Math.abs(f.motor.dutyIn1 - 0.5) < 0.02, `measured on RC2: ${(f.motor.dutyIn1 * 100).toFixed(1)} %`);
+  check('initial duty 50 %', Math.abs(f.motor.dutyEn1 - 0.5) < 0.02, `measured on RC2: ${(f.motor.dutyEn1 * 100).toFixed(1)} %`);
   board.input({ kind: 'button', id: 'sw0', pressed: true });
   runFor(0.6);
   board.input({ kind: 'button', id: 'sw0', pressed: false });
   runFor(0.3); frame(); runFor(0.2); f = frame();
-  check('SW0 raises duty to 80 %', Math.abs(f.motor.dutyIn1 - 0.8) < 0.02, `${(f.motor.dutyIn1 * 100).toFixed(1)} %`);
+  check('SW0 raises duty to 80 %', Math.abs(f.motor.dutyEn1 - 0.8) < 0.02, `${(f.motor.dutyEn1 * 100).toFixed(1)} %`);
   for (let i = 0; i < 40; i++) { runFor(0.05); f = board.frame(mcu.cycles / mcu.cycleHz(), 0.05); }
-  check('motor speed follows duty', Math.abs(f.motor.rpm - 800) < 30, `${f.motor.rpm.toFixed(0)} rpm`);
+  check('motor speed follows duty', Math.abs(f.motor.rpm - 160) < 6, `${f.motor.rpm.toFixed(0)} rpm`);
 }
 
 // ---------------------------------------------------------------- exp 5
@@ -145,6 +145,22 @@ const lcdText = (snap) => snap.lcd.rows.map((r) => r.map((c) => (c < 0 ? ' ' : c
   runFor(1.2);
   t = lcdText(frame());
   check('tracks change to 48 °C', /4[78]\.\d°C/.test(t[1]), JSON.stringify(t[1]));
+}
+{
+  console.log('Experiment 6 — RA1 left as an output (TRISA = 0x00)');
+  const src = code('exp6_pic_temp.c').replace('TRISA = 0x02;', 'TRISA = 0x00;');
+  const r = await compilePic18(src);
+  if (!r.ok) { console.log(r.log); throw new Error('exp6 variant failed to compile'); }
+  const { board, runFor, frame, flash } = picRig((c) => {
+    c.cables.LBANK = null; c.cables.LCD_DATA = 3; c.cables.LCD_CTRL = 4; c.dips.analog = [false, true];
+  });
+  flash(r.hex);
+  board.input({ kind: 'temperature', celsius: 31.4 });
+  runFor(1.2);
+  const t = lcdText(frame());
+  check('ADC reads the driven 0 V, not the LM35', /000\.0°C/.test(t[1]), JSON.stringify(t[1]));
+  const w = board.drainLogs().find((l) => /AN1 \(RA1\) is an output/.test(l.msg));
+  check('warns that the analog pin is an output', !!w, w?.msg ?? 'no warning');
 }
 
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nAll checks passed');

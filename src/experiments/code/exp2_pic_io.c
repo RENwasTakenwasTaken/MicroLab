@@ -4,10 +4,10 @@
  *                configuration set by the USB HID bootloader
  * Conventions  : MPLAB C18
  *
- * Board connections (see the Hardware tab):
- *   LED bank L0..L7  <- PORTD via FRC cable (PORT-D -> L-BANK)
- *   SW0 / SW1        -> RB0 / RB1 (active LOW, pull-up on board)
- *   Relay            <- RA4      Buzzer <- RA5
+ * Board connections (PICT board chart, see the Hardware tab):
+ *   LED bank L0..L7  <- PORTD via FRC cable (PORT-D -> L_BANK)
+ *   SW0 / SW1        -> RB1 / RB0 (active LOW, pull-up on board)
+ *   Relay            <- RC1      Buzzer <- RC2   (PERI_SW 4 and 5 ON)
  *
  * Behaviour:
  *   SW0 pressed  : relay ON, LEDs run left -> right
@@ -26,10 +26,10 @@ void _reset(void)
 }
 #pragma code
 
-#define SW0     PORTBbits.RB0
-#define SW1     PORTBbits.RB1
-#define RELAY   LATAbits.LATA4
-#define BUZZER  LATAbits.LATA5
+#define SW0     PORTBbits.RB1
+#define SW1     PORTBbits.RB0
+#define RELAY   LATCbits.LATC1
+#define BUZZER  LATCbits.LATC2
 #define LEDS    LATD
 
 void delay_ms(unsigned int ms)
@@ -45,8 +45,8 @@ void main(void)
     ADCON1 = 0x0F;              /* all AN pins digital */
     TRISB  = 0x03;              /* RB0, RB1 inputs */
     TRISD  = 0x00;              /* PORTD output -> LEDs */
-    TRISAbits.TRISA4 = 0;       /* relay driver */
-    TRISAbits.TRISA5 = 0;       /* buzzer driver */
+    TRISCbits.TRISC1 = 0;       /* relay driver */
+    TRISCbits.TRISC2 = 0;       /* buzzer driver */
     LEDS = 0x00; RELAY = 0; BUZZER = 0;
 
     while (1) {

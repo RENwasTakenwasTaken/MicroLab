@@ -1,5 +1,5 @@
 // Real mouse interaction in the 3D lab (needs `npm run dev`): click the monitor,
-// carry the USB plug to the board, hold RESET/BOOT with right-clicks, drag a probe.
+// carry the USB plug to the board, hold RESET/BOOT with Shift-clicks, upload.
 import { chromium } from 'playwright-core';
 import { existsSync, mkdirSync } from 'node:fs';
 
@@ -8,6 +8,8 @@ mkdirSync(out, { recursive: true });
 const exe = ['C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Google/Chrome/Application/chrome.exe'].find(existsSync);
 const browser = await chromium.launch({ executablePath: exe, headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1680, height: 960 } });
+// VLAB_PERF=1: run the same checks with the 3D performance mode on
+if (process.env.VLAB_PERF) await page.addInitScript(() => { try { localStorage.setItem('vlab.perfMode.v1', 'true'); } catch { /* storage unavailable */ } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
@@ -18,6 +20,7 @@ const proj = (p) => page.evaluate((pt) => window.__vlab3d.project(pt), p);
 const bench = (fn) => page.evaluate(fn);
 const setView = async (v) => { await page.evaluate((x) => window.__vlab.bench.getState().setView(x), v); await page.waitForTimeout(1300); };
 const clickAt = async (p, button = 'left') => { const s = await proj(p); await page.mouse.click(s.x, s.y, { button }); await page.waitForTimeout(250); };
+const shiftClickAt = async (p) => { await page.keyboard.down('Shift'); await clickAt(p); await page.keyboard.up('Shift'); };
 const W = (px, py, h) => [94 - py, h, px - 69.5]; // board photo mm -> world
 
 await page.goto('http://localhost:5173/#/exp/exp2');
@@ -36,6 +39,17 @@ await page.click('.pc-close');
 await page.waitForTimeout(1300);
 ok('X closes coding mode', await bench(() => window.__vlab.bench.getState().view === 'lab'));
 
+// 1b. UPLOAD without a device fails at once (no waiting), with the bootloader tip
+await setView('computer');
+await page.click('.pc-upload');
+await page.waitForFunction(() => window.__vlab.bench.getState().upload.phase === 'nodevice', null, { timeout: 10000 });
+ok('UPLOAD without a device reports "Device not detected" at once', await page.isVisible('.pc-log .c-err:has-text("Device not detected")'));
+ok('tip toast to enter the bootloader', await page.isVisible('.lab-toast:has-text("Tip: Enter PIC")'));
+ok('lab computer shows "Device detached"', await page.isVisible('.pc-chip:has-text("Device detached")'));
+ok('Reset Device disabled outside bootloader mode', await page.isDisabled('.pc-title button:has-text("Reset Device")'));
+await page.click('.pc-close');
+await page.waitForTimeout(1300);
+
 // 2. carry the USB plug from the desk into the board's Type-B socket
 await setView('lab');
 const rest = await bench(() => window.__vlab.bench.getState().plugs['usb:b'].rest);
@@ -45,7 +59,7 @@ await page.mouse.down(); await page.mouse.up();
 await page.waitForTimeout(300);
 ok('click on the USB plug picks it up', await bench(() => window.__vlab.bench.getState().carrying === 'usb:b'));
 await setView('board');
-const sock = W(-3, 142, 6);
+const sock = W(7, 130.5, 12.6 + 6);
 const s1 = await proj(sock);
 await page.mouse.move(s1.x, s1.y, { steps: 12 });
 await page.waitForTimeout(400);
@@ -53,18 +67,21 @@ await page.mouse.click(s1.x, s1.y);
 await page.waitForTimeout(400);
 ok('clicking the highlighted socket plugs it in', await bench(() => window.__vlab.bench.getState().plugs['usb:b'].attachedTo === 'usb:board'));
 
-// 3. bootloader sequence with real right-clicks on the module buttons
+// 3. bootloader sequence: Shift-click holds a button, a click on a held button releases it
 const RESET = W(75.3, 74, 22), BOOT = W(75.3, 61.3, 22);
 await setView('pins');
-await clickAt(RESET, 'right');
 const seq = () => page.evaluate(() => window.__vlab.frame.getState().frame?.device);
-await page.waitForTimeout(300);
-ok('right-click holds RESET', (await seq()).bootSeq === 'reset', JSON.stringify(await seq()));
-await clickAt(BOOT, 'right');
-await page.waitForTimeout(300);
 await clickAt(RESET, 'right');
 await page.waitForTimeout(300);
-await clickAt(BOOT, 'right');
+ok('right-click no longer holds a button', (await seq()).bootSeq !== 'reset', JSON.stringify(await seq()));
+await shiftClickAt(RESET);
+await page.waitForTimeout(300);
+ok('Shift-click holds RESET', (await seq()).bootSeq === 'reset', JSON.stringify(await seq()));
+await shiftClickAt(BOOT);
+await page.waitForTimeout(300);
+await clickAt(RESET);
+await page.waitForTimeout(300);
+await clickAt(BOOT);
 await page.waitForTimeout(400);
 const d = await seq();
 ok('RESET+BOOT sequence enters the bootloader', d.mode === 'bootloader' && d.bootSeq === 'ready', JSON.stringify(d));
@@ -87,7 +104,7 @@ ok('RESET click runs the program', (await seq()).mode === 'running');
 
 // 6. pull the USB cable mid-way through a second upload -> communication error
 await setView('pins');
-await clickAt(RESET, 'right'); await clickAt(BOOT, 'right'); await clickAt(RESET, 'right'); await clickAt(BOOT, 'right');
+await shiftClickAt(RESET); await shiftClickAt(BOOT); await clickAt(RESET); await clickAt(BOOT);
 await page.evaluate(() => { window.__vlabUp = true; });
 await setView('computer');
 await page.click('.pc-upload');

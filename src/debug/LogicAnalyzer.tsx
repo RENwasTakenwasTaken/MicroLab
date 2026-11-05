@@ -11,6 +11,11 @@ const WINDOWS = [100e-6, 500e-6, 1e-3, 2e-3, 5e-3, 10e-3, 20e-3, 50e-3, 100e-3, 
 const COLORS = ['#3fb68b', '#4c9df3', '#e8b04a', '#a77bf3', '#46c6d8', '#ef5b5b', '#f78c6c', '#c3e88d'];
 const fmtT = (s: number) => (s >= 1 ? `${s} s` : s >= 1e-3 ? `${+(s * 1e3).toFixed(3)} ms` : `${+(s * 1e6).toFixed(1)} µs`);
 const fmtF = (f: number) => (f >= 1e3 ? `${(f / 1e3).toFixed(3)} kHz` : `${f.toFixed(2)} Hz`);
+/** Up to two full ports plus a few single pins. */
+const MAX_CH = 20;
+/** PIC18F4550 PORTE has RE0–RE2 as I/O (RE3 is MCLR); every other port has 8 bits. */
+const portBits = (arch: string, p: number) => (arch === 'pic18' && p === 4 ? 3 : 8);
+const portName = (arch: string, p: number) => (arch === 'pic18' ? `PORT${'ABCDE'[p]}` : `P${p}`);
 
 function defaultChannels(expId: string, arch: string): PinRef[] {
   const exp = getExperiment(expId);
@@ -95,7 +100,15 @@ export function LogicAnalyzer({ expId }: { expId: string }) {
   const addChannel = (v: string) => {
     if (!v) return;
     const [p, b] = v.split(':').map(Number);
-    if (!channels.some((c) => c.port === p && c.bit === b)) setChannels([...channels, { port: p, bit: b }].slice(0, 8));
+    if (!channels.some((c) => c.port === p && c.bit === b)) setChannels([...channels, { port: p, bit: b }].slice(0, MAX_CH));
+  };
+  /** Every bit of a port, MSB first (so the rows read like the binary value); bits already shown are kept. */
+  const addPort = (v: string) => {
+    if (v === '') return;
+    const p = +v;
+    const bits = Array.from({ length: portBits(arch, p) }, (_, i) => portBits(arch, p) - 1 - i);
+    const extra = bits.map((b) => ({ port: p, bit: b })).filter((n) => !channels.some((c) => c.port === n.port && c.bit === n.bit));
+    setChannels([...channels, ...extra].slice(0, MAX_CH));
   };
 
   return (
@@ -106,13 +119,20 @@ export function LogicAnalyzer({ expId }: { expId: string }) {
             {WINDOWS.map((w) => <option key={w} value={w}>{fmtT(w)} window</option>)}
           </select>
           <button className={`btn ${frozen ? 'active' : ''}`} onClick={() => { frozenAt.current = analyzer.now; setFrozen(!frozen); }}>{frozen ? 'Resume' : 'Freeze'}</button>
+          {channels.length > 0 && <button className="btn ghost" onClick={() => setChannels([])} title="Remove every channel">Clear</button>}
         </div>
-        <select value="" onChange={(e) => addChannel(e.target.value)}>
-          <option value="">+ add channel…</option>
-          {Array.from({ length: ports }, (_, p) => Array.from({ length: 8 }, (_, b) => (
-            <option key={`${p}:${b}`} value={`${p}:${b}`}>{pinName(arch, { port: p, bit: b })}</option>
-          )))}
-        </select>
+        <div className="la-add">
+          <select value="" onChange={(e) => addChannel(e.target.value)} title="Add one pin">
+            <option value="">+ add channel…</option>
+            {Array.from({ length: ports }, (_, p) => Array.from({ length: portBits(arch, p) }, (_, b) => (
+              <option key={`${p}:${b}`} value={`${p}:${b}`}>{pinName(arch, { port: p, bit: b })}</option>
+            )))}
+          </select>
+          <select value="" onChange={(e) => addPort(e.target.value)} title="Add every bit of a port">
+            <option value="">+ add a port…</option>
+            {Array.from({ length: ports }, (_, p) => <option key={p} value={p}>{portName(arch, p)} (all {portBits(arch, p)} bits)</option>)}
+          </select>
+        </div>
         <table className="grid">
           <thead><tr><th>Ch</th><th>Freq</th><th>Duty</th><th /></tr></thead>
           <tbody>

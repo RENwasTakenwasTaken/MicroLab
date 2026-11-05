@@ -1,5 +1,6 @@
 // Physical connections on the bench: FRC ribbons, the USB Type-B cable,
-// oscilloscope probes and multimeter leads. Plugs are picked up with a click,
+// oscilloscope probes (crocodile clips on male-to-female jumpers), multimeter
+// leads and the gear motor's jumper wires. Plugs are picked up with a click,
 // carried with the mouse and dropped onto compatible connectors (or the desk).
 
 import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
@@ -10,7 +11,7 @@ import * as THREE from 'three';
 import { useBench, type Plug } from '../app/bench.ts';
 import { usbCableState } from '../app/upload.ts';
 import { ribbonGeometry, useHover } from '../three/interactive.tsx';
-import { ANCHORS, DESK_Y, SOCKET, SOCKETS, type SocketDef, type V3 } from './world.ts';
+import { ANCHORS, DESK_Y, MOTOR_PINS, SOCKET, SOCKETS, type SocketDef, type V3 } from './world.ts';
 
 /** Live position of the carried plug (updated every frame, read by cables). */
 export const carryPos = new THREE.Vector3(0, 40, 0);
@@ -23,6 +24,7 @@ export function plugPosition(p: Plug, carrying: string | null): THREE.Vector3 {
 }
 
 const PROBE_LEN = 64; // tip -> back of the probe / lead handle, along local +Y
+const JUMPER_LEN = 14; // female jumper housing: pin -> wire, along local +Y
 const USB_LEN = 40; // metal front -> back of the USB-B moulding, along local -Z
 const PROBE_TILT = Math.PI / 2.3;
 
@@ -34,13 +36,14 @@ function plugEuler(p: Plug, carrying: string | null): THREE.Euler {
   const s = p.attachedTo && p.id !== carrying ? SOCKET[p.attachedTo] : null;
   if (p.kind === 'frc') return new THREE.Euler(0, s ? s.yaw : 0.3, 0);
   if (p.kind === 'usb') return new THREE.Euler(0, s ? s.yaw : 0, 0);
+  if (p.kind === 'dcm') return new THREE.Euler(s ? 0 : -Math.PI / 2, 0, 0);
   return new THREE.Euler(s ? 0 : -PROBE_TILT, 0, 0);
 }
 
 /** Where the cable leaves the back of a round-cable plug, and the direction it leaves in. */
 function cableExit(p: Plug, carrying: string | null) {
   const e = plugEuler(p, carrying);
-  const back = p.kind === 'usb' ? new THREE.Vector3(0, 0, -USB_LEN) : new THREE.Vector3(0, PROBE_LEN, 0);
+  const back = p.kind === 'usb' ? new THREE.Vector3(0, 0, -USB_LEN) : new THREE.Vector3(0, p.kind === 'dcm' ? JUMPER_LEN : PROBE_LEN, 0);
   const dir = back.clone().normalize().applyEuler(e);
   dir.y += 0.35;
   return { at: plugPosition(p, carrying).add(back.applyEuler(e)), dir: dir.normalize() };
@@ -79,7 +82,7 @@ function SocketTarget({ s, kind }: { s: SocketDef; kind: string }) {
   const hot = hover || snapped;
   const occupied = useBench((st) => Object.values(st.plugs).some((p) => p.attachedTo === s.id));
   const tip = useHover({ name: s.label, info: occupied && kind !== 'probe' ? 'Occupied' : 'Click to connect here' });
-  const r = kind === 'probe' ? 2.2 : kind === 'usb' ? 9 : 11;
+  const r = kind === 'probe' || kind === 'dcm' ? 2.2 : kind === 'usb' ? 9 : 11;
   const color = occupied && kind !== 'probe' ? '#ef5b5b' : hot ? '#7dffb5' : '#3fb68b';
   return (
     <group position={s.pos}>
@@ -113,7 +116,27 @@ const plugMat = {
   tip: new THREE.MeshStandardMaterial({ color: '#d9dde2', metalness: 0.9, roughness: 0.25 }),
   yellow: new THREE.MeshStandardMaterial({ color: '#e8c33a', roughness: 0.4 }),
   blue: new THREE.MeshStandardMaterial({ color: '#2f67c9', roughness: 0.4 }),
+  jumperBlk: new THREE.MeshStandardMaterial({ color: '#1b1b1d', roughness: 0.5 }),
+  green: new THREE.MeshStandardMaterial({ color: '#2f9e57', roughness: 0.45 }),
 };
+
+/** Scope probe jumper colours: CH1 yellow, CH2 blue, ground black (matches the probe bands). */
+const PROBE_COLOR: Record<string, THREE.Material> = { ch1: plugMat.yellow, ch2: plugMat.blue, 'scope:gnd': plugMat.blk };
+
+/** Female jumper housing standing on a header pin (local +Y up from the pin top). */
+function FemaleHousing({ wire }: { wire: THREE.Material }) {
+  return (
+    <group>
+      <mesh position={[0, JUMPER_LEN / 2 - 1, 0]} castShadow material={plugMat.jumperBlk}><boxGeometry args={[2.5, JUMPER_LEN, 2.5]} /></mesh>
+      <mesh position={[0, JUMPER_LEN + 1, 0]} material={wire}><cylinderGeometry args={[0.75, 0.9, 3, 8]} /></mesh>
+    </group>
+  );
+}
+
+const isShown = (o: THREE.Object3D | null): boolean => !o || (o.visible && isShown(o.parent));
+/** Hit on the plug itself or on its own cable (cables carry userData.cable / userData.plug). */
+const ownsHit = (o: THREE.Object3D | null, root: THREE.Object3D, p: Plug): boolean =>
+  !!o && (o === root || o.userData.cable === p.cable || o.userData.plug === p.id || ownsHit(o.parent, root, p));
 
 function PlugMesh({ p }: { p: Plug }) {
   const group = useRef<THREE.Group>(null);
@@ -139,6 +162,10 @@ function PlugMesh({ p }: { p: Plug }) {
   }, [isCarried]);
   const onClick = (e: ThreeEvent<MouseEvent>) => {
     if (e.button !== 0 || e.delta > 6) return;
+    // the invisible grab area may overlap a nearby control: only take the click when this
+    // plug is the first visible thing under the cursor (e.g. not the BOOT button behind it)
+    const first = e.intersections.find((i) => isShown(i.object));
+    if (first && group.current && !ownsHit(first.object, group.current, p) && useBench.getState().carrying !== p.id) return;
     e.stopPropagation();
     const b = useBench.getState();
     if (b.carrying === p.id) { b.drop([carryPos.x, Math.max(-4, carryPos.y - 40), carryPos.z]); return; }
@@ -160,15 +187,31 @@ function PlugMesh({ p }: { p: Plug }) {
         <mesh position={[0, 0, -26]} castShadow material={plugMat.usb}><boxGeometry args={[16, 13, 28]} /></mesh>
       </group>
     );
+  } else if (p.kind === 'dcm') {
+    body = <FemaleHousing wire={p.id === 'mot:1' ? plugMat.red : plugMat.blk} />;
+  } else if (!p.id.startsWith('dmm')) {
+    // oscilloscope probe: its crocodile clip holds the male end of a jumper whose female end sits on the pin
+    const c = PROBE_COLOR[p.id] ?? plugMat.probe;
+    body = (
+      <group>
+        <FemaleHousing wire={c} />
+        <mesh position={[0, 22, 0]} material={c}><cylinderGeometry args={[0.75, 0.75, 14, 8]} /></mesh>
+        <mesh position={[0, 30, 0]} material={plugMat.tip}><boxGeometry args={[0.9, 4, 0.9]} /></mesh>
+        {/* crocodile clip: steel jaws, coloured boot */}
+        <mesh position={[0, 34, 0.7]} rotation={[0.12, 0, 0]} material={plugMat.tip}><boxGeometry args={[4.2, 9, 1]} /></mesh>
+        <mesh position={[0, 34, -0.7]} rotation={[-0.12, 0, 0]} material={plugMat.tip}><boxGeometry args={[4.2, 9, 1]} /></mesh>
+        <mesh position={[0, 46, 0]} castShadow material={c}><boxGeometry args={[6, 16, 5]} /></mesh>
+        <mesh position={[0, 57, 0]} material={p.id === 'scope:gnd' ? plugMat.blk : plugMat.probe}><cylinderGeometry args={[2, 3, 10, 10]} /></mesh>
+      </group>
+    );
   } else {
-    const isDmm = p.id.startsWith('dmm');
-    const m = isDmm ? (p.id === 'dmm:v' ? plugMat.red : plugMat.blk) : plugMat.probe;
+    // multimeter test lead
+    const m = p.id === 'dmm:v' ? plugMat.red : plugMat.blk;
     body = (
       <group>
         <mesh position={[0, 3, 0]} material={plugMat.tip}><cylinderGeometry args={[0.5, 0.25, 6, 8]} /></mesh>
-        <mesh position={[0, 12, 0]} material={isDmm ? m : plugMat.tip}><cylinderGeometry args={[isDmm ? 2.2 : 1.3, isDmm ? 1.2 : 1.3, 12, 12]} /></mesh>
-        <mesh position={[0, 40, 0]} castShadow material={m}><cylinderGeometry args={[isDmm ? 4 : 5, isDmm ? 3.2 : 4, 48, 14]} /></mesh>
-        {!isDmm && <mesh position={[0, 22, 0]} material={p.id === 'ch1' ? plugMat.yellow : plugMat.blue}><cylinderGeometry args={[4.2, 4.2, 4, 14]} /></mesh>}
+        <mesh position={[0, 12, 0]} material={m}><cylinderGeometry args={[2.2, 1.2, 12, 12]} /></mesh>
+        <mesh position={[0, 40, 0]} castShadow material={m}><cylinderGeometry args={[4, 3.2, 48, 14]} /></mesh>
       </group>
     );
   }
@@ -176,10 +219,13 @@ function PlugMesh({ p }: { p: Plug }) {
     <group ref={group} {...hover} onClick={onClick}>
       {body}
       {/* generous invisible grab area */}
-      <mesh visible={false} position={p.kind === 'probe' ? [0, 30, 0] : p.kind === 'usb' ? [0, 0, -18] : [0, 0, 0]}>
-        {p.kind === 'probe' ? <cylinderGeometry args={[9, 9, 70, 8]} /> : <sphereGeometry args={[p.kind === 'usb' ? 24 : 18, 10, 8]} />}
+      <mesh visible={false} position={p.kind === 'probe' ? [0, 30, 0] : p.kind === 'dcm' ? [0, 7, 0] : p.kind === 'usb' ? [0, 0, -18] : [0, 0, 0]}>
+        {p.kind === 'probe' ? <cylinderGeometry args={[9, 9, 70, 8]} />
+          : p.kind === 'dcm' ? <cylinderGeometry args={[4.5, 4.5, 18, 8]} />
+          : p.kind === 'usb' ? <sphereGeometry args={[24, 10, 8]} />
+          : <boxGeometry args={[21 * 1.5, 9 * 1.5, 8.6 * 1.5]} /> /* 1.5x the FRC plug body */}
       </mesh>
-      {isCarried && <mesh><sphereGeometry args={[p.kind === 'probe' ? 6 : 16, 16, 10]} /><meshBasicMaterial color="#4c9df3" transparent opacity={0.18} depthWrite={false} /></mesh>}
+      {isCarried && <mesh><sphereGeometry args={[p.kind === 'probe' || p.kind === 'dcm' ? 6 : 16, 16, 10]} /><meshBasicMaterial color="#4c9df3" transparent opacity={0.18} depthWrite={false} /></mesh>}
     </group>
   );
 }
@@ -195,11 +241,11 @@ function sagCurve(a: THREE.Vector3, da: THREE.Vector3, b: THREE.Vector3, db: THR
   ], false, 'centripetal');
 }
 
-function RoundCable({ from, plugId, color, radius = 2.2, fixedDir = new THREE.Vector3(0, 0.3, 1).normalize(), status }: {
-  from: V3; plugId: string; color: string; radius?: number; fixedDir?: THREE.Vector3; status?: () => string;
+function RoundCable({ from, plugId, color, radius = 2.2, fixedDir = new THREE.Vector3(0, 0.3, 1).normalize(), slack }: {
+  from: V3; plugId: string; color: string; radius?: number; fixedDir?: THREE.Vector3; slack?: number;
 }) {
   const mesh = useRef<THREE.Mesh>(null);
-  const mat = useMemo(() => new THREE.MeshStandardMaterial({ color, roughness: 0.55, emissive: '#000000' }), [color]);
+  const mat = useMemo(() => new THREE.MeshStandardMaterial({ color, roughness: 0.55 }), [color]);
   const key = useRef('');
   const empty = useMemo(() => new THREE.BufferGeometry(), []);
   useFrame(() => {
@@ -211,21 +257,12 @@ function RoundCable({ from, plugId, color, radius = 2.2, fixedDir = new THREE.Ve
     if (k !== key.current) {
       key.current = k;
       const a = new THREE.Vector3(...from);
-      const curve = sagCurve(a, fixedDir, exit.at, exit.dir);
+      const curve = sagCurve(a, fixedDir, exit.at, exit.dir, slack);
       mesh.current.geometry.dispose();
       mesh.current.geometry = new THREE.TubeGeometry(curve, 64, radius, 8, false);
     }
-    if (status) {
-      const s = status();
-      const t = performance.now() / 1000;
-      if (s === 'uploading') { mat.emissive.set('#2f7dff'); mat.emissiveIntensity = 0.6 + 0.4 * Math.sin(t * 10); }
-      else if (s === 'completed') { mat.emissive.set('#2fbf6c'); mat.emissiveIntensity = 0.18; }
-      else if (s === 'error') { mat.emissive.set('#ff3030'); mat.emissiveIntensity = 0.5 + 0.3 * Math.sin(t * 6); }
-      else if (s === 'connected') mat.emissiveIntensity = 0;
-      else mat.emissiveIntensity = 0;
-    }
   });
-  return <mesh ref={mesh} material={mat} castShadow geometry={empty} />;
+  return <mesh ref={mesh} material={mat} castShadow geometry={empty} userData={{ plug: plugId }} />;
 }
 
 function Ribbon({ idx }: { idx: number }) {
@@ -255,7 +292,7 @@ function Ribbon({ idx }: { idx: number }) {
     stripe.current.geometry = ribbonGeometry(curve, ax(ya), ax(yb), 1.1, -5.6, 0.06);
   });
   return (
-    <group {...hover}>
+    <group {...hover} userData={{ cable: `rib${idx}` }}>
       <mesh ref={body} castShadow geometry={empty1}><meshStandardMaterial color="#a2a7ac" roughness={0.65} side={THREE.DoubleSide} /></mesh>
       <mesh ref={stripe} geometry={empty2}><meshStandardMaterial color="#c0392b" roughness={0.6} side={THREE.DoubleSide} /></mesh>
     </group>
@@ -278,17 +315,17 @@ function UsbBadge() {
 
 export function BenchCables() {
   const plugs = useBench((s) => s.plugs);
-  const usbStatus = () => {
-    const b = useBench.getState();
-    return usbCableState(b.upload.phase, b.plugs['usb:b']?.attachedTo === 'usb:board');
-  };
+  const motorDir = new THREE.Vector3(0, 0.25, -1).normalize(); // out of the motor's relimate, along photo -x
   const genClip = SOCKET['tp:gen'].pos;
   return (
     <group>
       {[0, 1, 2, 3].map((i) => <Ribbon key={i} idx={i} />)}
-      <RoundCable from={ANCHORS.pcUsb} plugId="usb:b" color="#2b2c30" radius={2.6} status={usbStatus} />
+      <RoundCable from={ANCHORS.pcUsb} plugId="usb:b" color="#2b2c30" radius={2.6} />
       <RoundCable from={ANCHORS.scopeCh1} plugId="ch1" color="#2e3238" radius={1.8} />
       <RoundCable from={ANCHORS.scopeCh2} plugId="ch2" color="#2e3238" radius={1.8} />
+      <RoundCable from={ANCHORS.scopeGnd} plugId="scope:gnd" color="#151515" radius={1.2} />
+      <RoundCable from={MOTOR_PINS[0]} plugId="mot:1" color="#d63b2e" radius={0.8} fixedDir={motorDir} slack={0.15} />
+      <RoundCable from={MOTOR_PINS[1]} plugId="mot:2" color="#1d1d1f" radius={0.8} fixedDir={motorDir} slack={0.15} />
       <RoundCable from={ANCHORS.dmmV} plugId="dmm:v" color="#c62a2a" radius={1.6} fixedDir={new THREE.Vector3(0, 0.4, 1).normalize()} />
       <RoundCable from={ANCHORS.dmmCom} plugId="dmm:com" color="#151515" radius={1.6} fixedDir={new THREE.Vector3(0, 0.4, 1).normalize()} />
       <StaticCable a={ANCHORS.genOut} b={[genClip[0], genClip[1] + 2, genClip[2]]} color="#202226" />

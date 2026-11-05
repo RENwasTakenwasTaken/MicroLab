@@ -2,13 +2,13 @@
  * Experiment 6 : LM35 temperature sensor with real-time display on the LCD
  * Target       : PIC18F4550 @ 48 MHz (Fcy = 12 MHz), MPLAB C18 conventions
  *
- *   LM35 output -> AN0 (RA0)          10 mV / degree C
+ *   LM35 output -> AN1 (RA1)          10 mV / degree C   (PICT board chart)
  *   LCD: data PORTD, RS=RE0, RW=RE1, EN=RE2
  *
  * ADC: Vref = VDD (5 V), 10-bit, right justified, TAD = Fosc/64
  *   T(C) = ADC * 5000 mV / 1023 / 10 mV  = ADC * 500 / 1023
  * Change the room temperature with the LM35 slider (Hardware tab or click the sensor),
- * and measure RA0 with the DMM.
+ * and measure RA1 with the DMM.
  */
 #include <p18f4550.h>
 #include <delays.h>
@@ -52,10 +52,10 @@ void main(void)
     unsigned int adc;
     unsigned long t10;              /* temperature x10 */
 
-    TRISA = 0x01;                   /* RA0 analog input */
+    TRISA = 0x02;                   /* RA1 analog input */
     TRISD = 0x00;
     TRISE = 0x00;
-    ADCON1 = 0x0E;                  /* AN0 analog, others digital, Vref = VDD/VSS */
+    ADCON1 = 0x0D;                  /* AN0-AN1 analog, others digital, Vref = VDD/VSS */
     ADCON2 = 0x96;                  /* right justified, 4 TAD, Fosc/64 */
 
     lcd_init();
@@ -63,7 +63,7 @@ void main(void)
     lcd_string("Temperature:");
 
     while (1) {
-        adc = adc_read(0);
+        adc = adc_read(1);
         t10 = (unsigned long)adc * 5000UL / 1023UL;     /* in 0.1 degree C */
 
         lcd_cmd(0xC0);

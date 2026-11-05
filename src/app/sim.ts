@@ -76,7 +76,7 @@ export function openExperiment(id: string) {
   analyzer.clear();
   sim.init(arch, cfg);
   if (arch === 'pic18') {
-    resetBench((cfg as PicBoardConfig).cables);
+    resetBench();
     sim.send({ type: 'analyzer', enabled: true }); // the bench oscilloscope needs pin transitions
   }
   sim.send({ type: 'speed', value: useLab.getState().speed });

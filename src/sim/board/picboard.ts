@@ -1,7 +1,7 @@
 // Electrical model of the Smart Logic Technologies "EXCEL PIC V1.0" trainer:
 // PIC18F4550 module on a base board with LED bank, push buttons, 4x4 keypad,
-// relay, buzzer, L293D DC motor driver, 16x2 LCD, trimmer pot and LM35.
-// Connections marked as assumptions live in PicBoardConfig.assumptions.
+// RGB LED, relay, buzzer, L293D DC motor driver, 16x2 LCD, trimmer pot and LM35.
+// Pin connections live in PicBoardConfig.assumptions (defaults: PICT board chart).
 
 import type { LogLevel, McuCore, PinBus } from '../core/types.ts';
 import type { Pic18 } from '../pic18/pic18.ts';
@@ -17,29 +17,35 @@ const AN_PINS: [number, number][] = [
 export function defaultPicBoardConfig(): PicBoardConfig {
   return {
     crystalHz: 20_000_000,
-    cables: { LBANK: 3, KEY: null, LCD_DATA: null, LCD_CTRL: null },
+    // no ribbon is plugged in until the student connects one on the bench
+    cables: { LBANK: null, KEY: null, LCD_DATA: null, LCD_CTRL: null },
+    // PICT "Explore Board Connections" chart, PIC18F4550 column
     assumptions: {
-      sw0: { port: 1, bit: 0 },
-      sw1: { port: 1, bit: 1 },
-      relay: { port: 0, bit: 4 },
-      buzzer: { port: 0, bit: 5 },
-      motorEn: null,
-      motorIn1: { port: 2, bit: 2 },
-      motorIn2: { port: 2, bit: 1 },
-      potChannel: 0,
-      lm35Channel: 0,
+      sw0: { port: 1, bit: 1 }, // RB1
+      sw1: { port: 1, bit: 0 }, // RB0
+      relay: { port: 2, bit: 1 }, // RC1 (chart: "RD7, RC1" - RC1 written in for the PIC18F4550)
+      buzzer: { port: 2, bit: 2 }, // RC2
+      rgbRed: { port: 0, bit: 3 }, // RA3
+      rgbGreen: { port: 2, bit: 1 }, // RC1
+      rgbBlue: { port: 2, bit: 2 }, // RC2
+      motorEn1: { port: 2, bit: 2 }, // RC2 / CCP1
+      motorEn2: { port: 2, bit: 1 }, // RC1 / CCP2
+      motorIn1: { port: 3, bit: 6 }, // RD6
+      motorIn2: { port: 3, bit: 5 }, // RD5
+      potChannel: 2, // RA2 / AN2
+      lm35Channel: 1, // RA1 / AN1
       lcdRs: 0,
       lcdRw: 1,
       lcdEn: 2,
       ledActiveHigh: true,
-      motorRatedRpm: 1000,
-      motorSupplyV: 12,
+      motorRatedRpm: 200, // yellow TT gear motor (1:48), output shaft at 5 V
+      motorSupplyV: 5,
     },
     dips: {
       pb: [true, true],
-      periph: [true, true, false, false, false, false],
+      periph: [false, false, false, false, false, false], // RGB, relay and buzzer share RC1/RC2 with the motor: off until needed
       dcm: [true, true, true, false, false, false],
-      analog: [true, false],
+      analog: [true, true],
     },
   };
 }
@@ -160,7 +166,7 @@ export class PicBoard implements PinBus, SimBoard {
       }
       this.lastE = e;
     }
-    if (port === a.relay.port && this.cfg.dips.periph[0]) {
+    if (port === a.relay.port && this.cfg.dips.periph[3]) {
       const on = this.outLevel(port, a.relay.bit) === 1;
       if (on !== this.relayOn) { this.relayOn = on; this.relaySwitches++; }
     }
@@ -222,14 +228,23 @@ export class PicBoard implements PinBus, SimBoard {
         leds[i] = a.ledActiveHigh ? d : driven ? 1 - d : 0;
       }
     }
-    const en = dips.dcm[0] ? (a.motorEn ? duty(a.motorEn) : 1) : 0;
+    // DCM_SW: 1 = EN1, 2 = IN1, 3 = IN2, 4 = EN2 (an open switch leaves the L293D input low)
+    const en1 = dips.dcm[0] ? duty(a.motorEn1) : 0;
+    const en2 = dips.dcm[3] ? duty(a.motorEn2) : 0;
     const in1 = dips.dcm[1] ? duty(a.motorIn1) : 0;
     const in2 = dips.dcm[2] ? duty(a.motorIn2) : 0;
-    const drive = this.power ? en * (in1 * (1 - in2) - in2 * (1 - in1)) : 0;
-    const target = drive * a.motorRatedRpm;
+    const drive = this.power ? en1 * (in1 * (1 - in2) - in2 * (1 - in1)) : 0;
+    // channel 2 (DCM2): EN2 with IN3 = RD1, IN4 = RD0 through DCM_SW 5/6 (PICT chart)
+    const in3 = dips.dcm[4] ? duty({ port: 3, bit: 1 }) : 0;
+    const in4 = dips.dcm[5] ? duty({ port: 3, bit: 0 }) : 0;
+    const drive2 = this.power ? en2 * (in3 * (1 - in4) - in4 * (1 - in3)) : 0;
+    // the motor only turns when its jumper wires are on a motor connector
+    const link = this.cfg.motorLink ?? 1;
+    const target = (Math.abs(link) === 1 ? drive : Math.abs(link) === 2 ? drive2 : 0) * Math.sign(link) * a.motorRatedRpm;
     this.motorRpm += (target - this.motorRpm) * (1 - Math.exp(-dt / 0.25));
     if (Math.abs(this.motorRpm) < 0.05 && target === 0) this.motorRpm = 0;
-    const buzzer = this.power && dips.periph[1] ? duty(a.buzzer) : 0;
+    const buzzer = this.power && dips.periph[4] ? duty(a.buzzer) : 0;
+    const rgb = [a.rgbRed, a.rgbGreen, a.rgbBlue].map((p, i) => (this.power && dips.periph[i] ? duty(p) : 0)) as [number, number, number];
     const inputs: Record<string, boolean> = {};
     for (const id of this.pressed) inputs[id] = true;
     return {
@@ -242,7 +257,8 @@ export class PicBoard implements PinBus, SimBoard {
       relay: this.power && this.relayOn,
       relaySwitches: this.relaySwitches,
       buzzer,
-      motor: { rpm: this.motorRpm, drive, dutyIn1: in1, dutyIn2: in2 },
+      rgb,
+      motor: { rpm: this.motorRpm, drive, dutyEn1: en1, dutyEn2: en2, dutyIn1: in1, dutyIn2: in2 },
       pot: this.pot,
       potVolts: this.pot * 5,
       temperature: this.temperature,

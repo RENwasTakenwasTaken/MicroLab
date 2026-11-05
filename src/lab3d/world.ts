@@ -1,7 +1,7 @@
 // World layout of the lab bench (millimetres, y up). The trainer sits at the
 // origin exactly as in the board view; everything else is placed around it.
 
-import { BASE, FRC_POINTS, MODULE } from '../three/layout.ts';
+import { BASE, FRC_LABEL, FRC_POINTS, MODULE } from '../three/layout.ts';
 
 export type V3 = [number, number, number];
 
@@ -26,7 +26,8 @@ export const SIGGEN = { pos: [800, DESK_Y, -210] as V3, rotY: -0.55, w: 290, h: 
 export const DMM = { pos: [270, DESK_Y, 150] as V3, rotY: -0.35, tilt: 0.38 };
 
 // ------------------------------------------------------------- sockets
-export type SocketKind = 'frc' | 'usb' | 'probe';
+/** frc: ribbon plug · usb: Type-B · probe: test point for probe jumpers / DMM leads · dcm: motor connector pin */
+export type SocketKind = 'frc' | 'usb' | 'probe' | 'dcm';
 
 export interface SocketDef {
   id: string;
@@ -39,6 +40,8 @@ export interface SocketDef {
   frcRole?: 'port' | 'peripheral';
   /** probe test points: electrical node */
   node?: TestNode;
+  /** dcm pins: which motor connector (1 = DCM1, 2 = DCM2) and pin (1 or 2) */
+  dcm?: { conn: 1 | 2; pin: 1 | 2 };
 }
 
 export type TestNode = { kind: 'pin'; port: number; bit: number } | { kind: 'gnd' } | { kind: 'vcc' } | { kind: 'gen' };
@@ -54,12 +57,14 @@ const HEADERS: { x: number; y: number; labels: string[] }[] = [
   { x: 70.5, y: 119.6, labels: ['VCC', 'GND', 'RC0', 'RC1', 'RC2', 'RC3', 'RC4', 'RC5', 'RC6', 'RC7'] },
 ];
 
+const UART_HDR = { x: 49.8, y: 150.8 };
+
 function buildSockets(): SocketDef[] {
   const out: SocketDef[] = [];
   for (const [name, p] of Object.entries(FRC_POINTS)) {
     const h = (p.module ? MODULE_TOP : 0) + 9;
     out.push({
-      id: `frc:${name}`, kind: 'frc', label: name.replace('_', ' '), pos: boardToWorld(p.x, p.y, h),
+      id: `frc:${name}`, kind: 'frc', label: FRC_LABEL[name] ?? name, pos: boardToWorld(p.x, p.y, h),
       yaw: -((p.rot * Math.PI) / 180) - Math.PI / 2, frcRole: name.startsWith('PORT') ? 'port' : 'peripheral',
     });
   }
@@ -70,6 +75,14 @@ function buildSockets(): SocketDef[] {
       const px = hd.x + ((n - 1) / 2 - k) * 2.54;
       const node: TestNode = lab === 'GND' ? { kind: 'gnd' } : lab === 'VCC' ? { kind: 'vcc' } : { kind: 'pin', port: PORT_IDX[lab[1]], bit: +lab[2] };
       out.push({ id: `tp:${hi}:${lab}`, kind: 'probe', label: lab, pos: boardToWorld(px, hd.y, MODULE_TOP + 9.8), yaw: 0, node });
+    });
+  });
+  // UART header (base board, GND · RXD1 · TXD1 · RXD0 · TXD0 · VCC as printed): its GND pin grounds the scope probes
+  out.push({ id: 'tp:uart:GND', kind: 'probe', label: 'GND (UART header)', pos: boardToWorld(UART_HDR.x + 2.5 * 2.54, UART_HDR.y, 9.8), yaw: 0, node: { kind: 'gnd' } });
+  // DCM1 / DCM2 relimate pins: the gear motor's female jumper wires go here
+  ([[1, 90.2], [2, 99.5]] as const).forEach(([conn, x]) => {
+    ([1, 2] as const).forEach((pin) => {
+      out.push({ id: `dcm:${conn}:${pin}`, kind: 'dcm', label: `DCM${conn} pin ${pin}`, pos: boardToWorld(x + (pin === 1 ? -1.27 : 1.27), 3.5, 9), yaw: 0, dcm: { conn, pin } });
     });
   });
   // signal generator output clip lying on the desk
@@ -93,4 +106,16 @@ export const ANCHORS = {
   dmmCom: rotateY([7, 10, 78], DMM.rotY, DMM.pos),
   dmmV: rotateY([30, 10, 78], DMM.rotY, DMM.pos),
   genOut: rotateY([128, 22, SIGGEN.d / 2 + 6], SIGGEN.rotY, SIGGEN.pos),
+  scopeGnd: rotateY([60, 18, SCOPE.d / 2 + 18], SCOPE.rotY, SCOPE.pos),
 };
+
+/**
+ * The external gear motor on its fixed metal stand, beside the DCM connectors (trainer photo
+ * coordinates, mm; h = height above the base PCB). Its relimate's two male pins carry the
+ * permanently attached female jumper wires (red = pin 1, black = pin 2).
+ */
+export const MOTOR = { x: 74, y: -25, h: 32 };
+export const MOTOR_PINS: [V3, V3] = [
+  boardToWorld(MOTOR.x - 54, MOTOR.y - 1.27, MOTOR.h),
+  boardToWorld(MOTOR.x - 54, MOTOR.y + 1.27, MOTOR.h),
+];

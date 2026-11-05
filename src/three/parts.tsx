@@ -32,13 +32,16 @@ const CYL8 = new THREE.CylinderGeometry(1, 1, 1, 10);
 
 type V3 = [number, number, number];
 
-/** Axis aligned box given centre and size. */
-export function Box({ p, s, m, ...rest }: { p: V3; s: V3; m: THREE.Material } & Partial<{ castShadow: boolean }>) {
-  return <mesh geometry={BOX} material={m} position={p} scale={s} castShadow={rest.castShadow ?? true} receiveShadow />;
+/** userData marking a fixed mesh inside an interactive part: merged by <StaticBatch tagged> in performance mode. */
+export const BATCH = { batch: true };
+
+/** Axis aligned box given centre and size. `batch`: the mesh never moves (see BATCH). */
+export function Box({ p, s, m, batch, ...rest }: { p: V3; s: V3; m: THREE.Material; batch?: boolean } & Partial<{ castShadow: boolean }>) {
+  return <mesh geometry={BOX} material={m} position={p} scale={s} castShadow={rest.castShadow ?? true} receiveShadow userData={batch ? BATCH : undefined} />;
 }
 
-export function Cyl({ p, r, h, m, rot, seg8 }: { p: V3; r: number; h: number; m: THREE.Material; rot?: V3; seg8?: boolean }) {
-  return <mesh geometry={seg8 ? CYL8 : CYL} material={m} position={p} scale={[r, h, r]} rotation={rot} castShadow receiveShadow />;
+export function Cyl({ p, r, h, m, rot, seg8, batch }: { p: V3; r: number; h: number; m: THREE.Material; rot?: V3; seg8?: boolean; batch?: boolean }) {
+  return <mesh geometry={seg8 ? CYL8 : CYL} material={m} position={p} scale={[r, h, r]} rotation={rot} castShadow receiveShadow userData={batch ? BATCH : undefined} />;
 }
 
 /** Many identical small boxes (pins) as a single instanced mesh. */

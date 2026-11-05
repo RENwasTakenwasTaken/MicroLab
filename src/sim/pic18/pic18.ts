@@ -84,6 +84,8 @@ export class Pic18 implements McuCore {
   ];
   // ADC / EUSART / EEPROM scheduling
   adcDoneAt = -1;
+  /** AN channels already warned about being sampled while their pin is an output */
+  adcTrisWarned = 0;
   txBusyUntil = -1;
   txShift = -1;
   txBuffer = -1;
@@ -157,7 +159,7 @@ export class Pic18 implements McuCore {
     this.tmr1 = 0; this.t1pre = 0; this.tmr3 = 0; this.t3pre = 0;
     this.tmr2 = 0; this.t2pre = 0; this.t2post = 0;
     for (const c of this.ccp) { c.out = 0; c.fallAt = -1; c.captureCount = 0; }
-    this.adcDoneAt = -1; this.txBusyUntil = -1; this.txShift = -1; this.txBuffer = -1;
+    this.adcDoneAt = -1; this.adcTrisWarned = 0; this.txBusyUntil = -1; this.txShift = -1; this.txBuffer = -1;
     this.rxFifo = []; this.rxNextAt = -1; this.nextEvent = Infinity; this.wdtSeconds = 0;
     this.irqBlock = 0;
     this.recalcClock();
@@ -595,7 +597,16 @@ export class Pic18 implements McuCore {
     let v = 0;
     if (ch < AN_PINS.length) {
       const [p, b] = AN_PINS[ch];
-      v = this.bus.analogVoltage(p, b);
+      if (this.driven[p] & (1 << b)) {
+        // TRIS bit = 0: the pin's output driver stays on in analog mode (PCFG only disables the
+        // digital input buffer) and, being far stiffer than the pot / LM35, sets the pin voltage.
+        // The ADC samples that pin voltage, i.e. the LAT level.
+        v = (this.level[p] >> b) & 1 ? 5.0 : 0;
+        if (!(this.adcTrisWarned & (1 << ch))) {
+          this.adcTrisWarned |= 1 << ch;
+          this.bus.log('warn', `ADC channel AN${ch} (R${'ABCDE'[p]}${b}) is an output (TRIS${'ABCDE'[p]} bit ${b} = 0): the output driver forces the pin to ${v ? '5 V' : '0 V'}, so the ADC reads that instead of the analog source. Set TRIS${'ABCDE'[p]} bit ${b} = 1 for an analog input.`);
+        }
+      } else v = this.bus.analogVoltage(p, b);
       if (!(this.analogMask(p) & (1 << b)))
         this.bus.log('warn', `ADC channel AN${ch} is not configured as analog in ADCON1 (PCFG). Reading may be wrong on real hardware.`);
     }

@@ -1,10 +1,10 @@
-// UPLOAD: compile -> wait for the board in USB bootloader mode -> erase ->
-// program -> verify. Modelled on Microchip's USB HID Bootloader tool. Each step
+// UPLOAD: check the board is in USB bootloader mode -> compile -> erase ->
+// program -> verify (a missing device fails at once: the student retries UPLOAD). Modelled on Microchip's USB HID Bootloader tool. Each step
 // checks the real simulator state; nothing is reported as done unless it is.
 
 import { build, sim } from './sim.ts';
 import { useBench, usbConnected, type UploadPhase } from './bench.ts';
-import { useFrame, useLab } from './store.ts';
+import { sourceFor, useFrame, useLab } from './store.ts';
 import type { FromWorker } from '../sim/protocol.ts';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -24,19 +24,6 @@ export const deviceReady = () => {
   return usbConnected() && !!f && f.board.power && f.device.mode === 'bootloader';
 };
 
-function waitFor(cond: () => boolean, my: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const check = () => {
-      if (my !== token) { stop(); resolve(false); }
-      else if (cond()) { stop(); resolve(true); }
-    };
-    const a = useBench.subscribe(check);
-    const b = useFrame.subscribe(check);
-    const stop = () => { a(); b(); };
-    check();
-  });
-}
-
 function bootloaderCommand(msg: { type: 'erase' } | { type: 'flash'; hex: string; debug?: unknown }): Promise<Extract<FromWorker, { type: 'bootloader' }>> {
   return new Promise((resolve) => {
     const op = msg.type;
@@ -49,6 +36,24 @@ function bootloaderCommand(msg: { type: 'erase' } | { type: 'flash'; hex: string
 }
 
 class LinkLost extends Error {}
+
+/**
+ * The application must relocate its vectors above the bootloader: vector_relocate.h in
+ * the project (the PICT lab way), or C18 "#pragma code <name> = 0x1000" written out.
+ */
+export function hasVectorRelocation(source: string) {
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  return /#\s*include\s*[<"]\s*vector_relocate\.h\s*[>"]/i.test(code) || /#\s*pragma\s+code\s+\w+\s*=\s*0x0*1000\b/i.test(code);
+}
+
+const BOOT_TIP = "Tip: Enter PIC's bootloader mode to allow computer to upload program to PIC";
+
+/** The HID bootloader tool finds no device: say so in the log (red) and give the tip once. */
+function noDevice() {
+  setUpload('nodevice');
+  log('Device not detected (USB HID Bootloader, VID 0x04D8 / PID 0x003C).');
+  useBench.getState().notify(usbConnected() ? BOOT_TIP : `${BOOT_TIP} (connect the USB cable first)`, 'info', 6000);
+}
 
 /** Compiles into the lab computer's log; null when the build failed or was superseded. */
 async function compile(expId: string, my: number, then: string) {
@@ -74,22 +79,32 @@ async function compile(expId: string, my: number, then: string) {
 /** BUILD on the lab computer: compile only, nothing is sent to the board. */
 export async function buildOnly(expId: string) {
   const my = ++token;
-  if (await compile(expId, my, '')) setUpload('built');
+  if (!(await compile(expId, my, ''))) return;
+  if (!hasVectorRelocation(sourceFor(expId))) log('warning: vector_relocate.h is not included - UPLOAD will refuse this program (it would erase the USB bootloader).');
+  setUpload('built');
 }
 
 export async function upload(expId: string) {
   const my = ++token;
+  // checked before anything else: programming vectors at 0x0000 would wipe the USB bootloader
+  if (!hasVectorRelocation(sourceFor(expId))) {
+    useBench.setState({ upload: { phase: 'blocked', progress: 0, log: [] } });
+    log('WARNING: vector_relocate.h is not part of this program.');
+    log('Without it the reset and interrupt vectors stay at 0x0000-0x0018, inside the USB HID bootloader (0x0000-0x0FFF).');
+    log('Uploading would ERASE the bootloader, and the computer would no longer detect the PIC over USB.');
+    log('→ Add vector_relocate.h to the project and put  #include "vector_relocate.h"  at the top of main.c, then UPLOAD again.');
+    log('Upload aborted: nothing was written to the board.');
+    return;
+  }
+  // like the HID bootloader tool: no device in bootloader mode -> nothing to program; retry UPLOAD
+  if (!deviceReady()) {
+    useBench.setState({ upload: { phase: 'nodevice', progress: 0, log: [] } });
+    noDevice();
+    return;
+  }
   const b = await compile(expId, my, ' Upload aborted.');
   if (!b) return;
-
-  if (!deviceReady()) {
-    setUpload('waiting');
-    log('Device not detected (USB HID Bootloader, VID 0x04D8 / PID 0x003C).');
-    if (!usbConnected()) log('→ Connect the Type-B USB cable between the computer and the PIC board.');
-    log('→ Enter bootloader mode: hold RESET, press and hold BOOT, release RESET, release BOOT.');
-    const ok = await waitFor(deviceReady, my);
-    if (!ok) return;
-  }
+  if (!deviceReady()) { noDevice(); return; }
   log('Device attached. Bootloader firmware v2.9 · PIC18F4550');
   try {
     const guard = () => {
@@ -137,7 +152,7 @@ export async function upload(expId: string) {
 export function cancelUpload() {
   token++;
   const u = useBench.getState().upload;
-  if (u.phase === 'waiting' || u.phase === 'compiling') {
+  if (u.phase === 'compiling') {
     useBench.setState({ upload: { ...u, phase: 'idle', log: [...u.log, 'Upload cancelled.'] } });
   }
 }

@@ -27,7 +27,7 @@ function App() {
 if (import.meta.env.DEV) {
   // automation hook for tests/ui-lab.mjs (dev server only)
   Promise.all([import('./app/bench.ts'), import('./app/sim.ts'), import('./app/store.ts')]).then(([bench, simMod, store]) => {
-    (window as unknown as { __vlab: unknown }).__vlab = { bench: bench.useBench, sim: simMod.sim, frame: store.useFrame };
+    (window as unknown as { __vlab: unknown }).__vlab = { bench: bench.useBench, sim: simMod.sim, frame: store.useFrame, lab: store.useLab };
   });
 }
 

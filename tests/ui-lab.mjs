@@ -1,6 +1,6 @@
 // End-to-end walk through the 3D lab workflow (needs `npm run dev`):
-// computer -> UPLOAD (waits for device) -> USB cable -> RESET/BOOT sequence ->
-// upload completes -> RESET runs the program -> probes on the scope / DMM.
+// computer -> UPLOAD without a device (fails at once) -> USB cable -> RESET/BOOT
+// sequence -> UPLOAD completes -> RESET runs the program -> probes on the scope / DMM.
 // Usage: node tests/ui-lab.mjs [expId] [outDir]
 import { chromium } from 'playwright-core';
 import { existsSync, mkdirSync } from 'node:fs';
@@ -11,6 +11,8 @@ mkdirSync(out, { recursive: true });
 const exe = ['C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Google/Chrome/Application/chrome.exe', '/usr/bin/google-chrome'].find(existsSync);
 const browser = await chromium.launch({ executablePath: exe, headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1680, height: 960 } });
+// VLAB_PERF=1: run the same checks with the 3D performance mode on
+if (process.env.VLAB_PERF) await page.addInitScript(() => { try { localStorage.setItem('vlab.perfMode.v1', 'true'); } catch { /* storage unavailable */ } });
 const errors = [];
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 page.on('pageerror', (e) => errors.push(String(e)));
@@ -32,9 +34,9 @@ await page.click('.view-toggle'); await page.click('.seg-btn:has-text("Computer"
 await page.waitForTimeout(1800);
 await shot('2-coding');
 await page.click('.pc-upload');
-await page.waitForFunction(() => window.__vlab.bench.getState().upload.phase === 'waiting', null, { timeout: 60000 });
+await page.waitForFunction(() => window.__vlab.bench.getState().upload.phase === 'nodevice', null, { timeout: 60000 });
 console.log('after UPLOAD without device:', await state());
-await shot('3-waiting');
+await shot('3-nodevice');
 await page.click('.pc-close');
 await page.waitForTimeout(1200);
 
@@ -45,7 +47,11 @@ await input({ kind: 'button', id: 'reset', pressed: false });
 await page.waitForTimeout(300);
 console.log('bootloader entered:', await state());
 await input({ kind: 'button', id: 'boot', pressed: false });
-await page.waitForTimeout(1500);
+await page.waitForTimeout(800);
+await page.evaluate(() => window.__vlab.bench.getState().setView('computer'));
+await page.waitForTimeout(1800);
+await page.click('.pc-upload');
+await page.waitForTimeout(2500);
 await shot('4-uploading');
 await page.waitForFunction(() => window.__vlab.bench.getState().upload.phase === 'done', null, { timeout: 30000 });
 console.log('upload done:', await state());
@@ -55,6 +61,7 @@ await page.waitForTimeout(1500);
 console.log('after RESET:', await state());
 
 console.log('CH1 probe on RD0:', await attach('ch1', 'tp:1:RD0'));
+console.log('probe ground on UART GND:', await attach('scope:gnd', 'tp:uart:GND'));
 console.log('DMM red on RD0:', await attach('dmm:v', 'tp:1:RD0'));
 await page.evaluate(() => window.__vlab.bench.getState().setView('lab'));
 await page.waitForTimeout(2500);

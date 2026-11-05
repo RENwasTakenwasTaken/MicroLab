@@ -1,18 +1,20 @@
 // Hardware configuration: FRC cable patching, DIP switches, environment inputs,
-// and the editable table of unverified electrical assumptions.
+// and the editable pin connections (defaults: PICT "Explore Board Connections" chart).
 
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useFrame, useLab } from '../app/store.ts';
 import { sim } from '../app/sim.ts';
 import type { FrcTarget, Mcs51BoardConfig, PicBoardConfig, PinRef } from '../sim/board/types.ts';
 import { Icon } from '../ui/icons.tsx';
 
 const PORTS = ['A', 'B', 'C', 'D', 'E'];
-const FRC_NAMES: Record<FrcTarget, string> = { LBANK: 'L-BANK (LED array)', KEY: 'KEY (4×4 keypad)', LCD_DATA: 'LCD DATA (D0–D7)', LCD_CTRL: 'LCD CNTRL (RS/RW/EN)' };
+const FRC_NAMES: Record<FrcTarget, string> = { LBANK: 'L_BANK (LED array)', KEY: 'MAT_KEY (4×4 keypad)', LCD_DATA: 'LCD_DATA (D0–D7)', LCD_CTRL: 'LCD_CNTRL (RS/RW/EN)' };
 const DIP_INFO: Record<string, [string, string[]]> = {
-  pb: ['Push-button interface', ['SW0 → RB0', 'SW1 → RB1']],
-  periph: ['Relay / buzzer', ['Relay ← RA4', 'Buzzer ← RA5', '—', '—', '—', '—']],
-  dcm: ['DCM_SW (L293D)', ['EN1 → VCC', 'IN1 ← RC2', 'IN2 ← RC1', '—', '—', '—']],
-  analog: ['Analog input', ['POT → AN0', 'LM35 → AN0']],
+  pb: ['Push-button interface', ['SW0 → RB1', 'SW1 → RB0']],
+  periph: ['PERI_SW (RGB LED, relay, buzzer)', ['RGB red ← RA3', 'RGB green ← RC1', 'RGB blue ← RC2', 'Relay ← RC1', 'Buzzer ← RC2', '—']],
+  dcm: ['DCM_SW (L293D)', ['EN1 ← RC2/CCP1', 'IN1 ← RD6', 'IN2 ← RD5', 'EN2 ← RC1/CCP2', '—', '—']],
+  analog: ['Analog input', ['POT → RA2/AN2', 'LM35 → RA1/AN1']],
 };
 
 function commit(cfg: PicBoardConfig) {
@@ -20,15 +22,58 @@ function commit(cfg: PicBoardConfig) {
   sim.input({ kind: 'config', cfg: structuredClone(cfg) });
 }
 
+/** PIC18F4550 pins with a CCP (PWM) output; CCP2 sits on RC1 unless CCP2MX moves it to RB3. */
+const CCP_PINS: Record<string, string> = { '2:2': 'CCP1', '2:1': 'CCP2', '1:3': 'CCP2 alt' };
+
 function PinSelect({ value, onChange }: { value: PinRef; onChange(p: PinRef): void }) {
   return (
     <select value={`${value.port}:${value.bit}`} onChange={(e) => { const [p, b] = e.target.value.split(':').map(Number); onChange({ port: p, bit: b }); }}>
-      {PORTS.map((P, p) => Array.from({ length: 8 }, (_, b) => <option key={`${p}:${b}`} value={`${p}:${b}`}>R{P}{b}</option>))}
+      {PORTS.map((P, p) => Array.from({ length: 8 }, (_, b) => <option key={`${p}:${b}`} value={`${p}:${b}`}>R{P}{b}{CCP_PINS[`${p}:${b}`] ? ` · ${CCP_PINS[`${p}:${b}`]}` : ''}</option>))}
     </select>
   );
 }
 
+/** An L293D enable: a (preferably CCP) pin for PWM speed control, or tied high. */
+function EnableSelect({ value, onChange }: { value: PinRef | null; onChange(p: PinRef | null): void }) {
+  return (
+    <select value={value ? `${value.port}:${value.bit}` : 'vcc'} onChange={(e) => { if (e.target.value === 'vcc') return onChange(null); const [p, b] = e.target.value.split(':').map(Number); onChange({ port: p, bit: b }); }}>
+      <optgroup label="PWM (CCP)">
+        {Object.entries(CCP_PINS).map(([k, n]) => { const [p, b] = k.split(':').map(Number); return <option key={k} value={k}>R{PORTS[p]}{b} · {n}</option>; })}
+      </optgroup>
+      <option value="vcc">VCC (always enabled)</option>
+      <optgroup label="Other pins (on/off only, or software PWM)">
+        {PORTS.map((P, p) => Array.from({ length: 8 }, (_, b) => `${p}:${b}`).filter((k) => !CCP_PINS[k]).map((k) => <option key={k} value={k}>R{P}{k.split(':')[1]}</option>))}
+      </optgroup>
+    </select>
+  );
+}
+
+const CHART_SRC = '/pict-board-connections.jpg';
+
+/** PICT's "Explore Board Connections" chart, shown above the whole UI. */
+function ChartViewer({ onClose }: { onClose(): void }) {
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, [onClose]);
+  // portal: the glass pane's backdrop-filter would otherwise trap a fixed overlay inside it
+  return createPortal(
+    <div className="chart-viewer" role="dialog" aria-label="PICT board connections chart" onClick={onClose}>
+      <figure onClick={(e) => e.stopPropagation()}>
+        <figcaption>
+          <b>Explore Board Connections</b> — PICT Embedded System Lab A3-206 (pin defaults use the PIC18F4550 column)
+          <button className="btn ghost icon" onClick={onClose} title="Close (Esc)"><Icon name="x" /></button>
+        </figcaption>
+        <img src={CHART_SRC} alt="PICT Explore Board Connections chart: LPC2148, LPC1768, PIC18F4520, PIC18F4550 and SST89E516RD2 pin connections" />
+      </figure>
+    </div>,
+    document.body,
+  );
+}
+
 function PicHardware() {
+  const [chart, setChart] = useState(false);
   const cfg = useLab((s) => s.boardCfg) as PicBoardConfig;
   const board = useFrame((s) => (s.frame?.board.kind === 'pic' ? s.frame.board : null));
   const set = (fn: (c: PicBoardConfig) => void) => { const c = structuredClone(cfg); fn(c); commit(c); };
@@ -85,9 +130,9 @@ function PicHardware() {
         </div>
       </div>
       <div className="section">
-        <h4>Electrical assumptions <span className="tag warn">unverified</span></h4>
+        <h4>Pin connections <span className="tag ok">PICT chart</span></h4>
         <p className="muted" style={{ fontSize: 12 }}>
-          These connections are inferred from the board photograph and common lab programs (no schematic available). Correct them here once verified in the lab — the simulation updates immediately.
+          Defaults follow PICT's “Explore Board Connections” chart (PIC18F4550 column). Change them here if a board differs — the simulation updates immediately.
         </p>
         <div className="assume">
           <span>Crystal</span>
@@ -98,6 +143,11 @@ function PicHardware() {
           <span>SW1</span><PinSelect value={a.sw1} onChange={(p) => set((c) => { c.assumptions.sw1 = p; })} />
           <span>Relay driver</span><PinSelect value={a.relay} onChange={(p) => set((c) => { c.assumptions.relay = p; })} />
           <span>Buzzer driver</span><PinSelect value={a.buzzer} onChange={(p) => set((c) => { c.assumptions.buzzer = p; })} />
+          <span>RGB LED red</span><PinSelect value={a.rgbRed} onChange={(p) => set((c) => { c.assumptions.rgbRed = p; })} />
+          <span>RGB LED green</span><PinSelect value={a.rgbGreen} onChange={(p) => set((c) => { c.assumptions.rgbGreen = p; })} />
+          <span>RGB LED blue</span><PinSelect value={a.rgbBlue} onChange={(p) => set((c) => { c.assumptions.rgbBlue = p; })} />
+          <span>L293D EN1 (DCM1 speed)</span><EnableSelect value={a.motorEn1} onChange={(p) => set((c) => { c.assumptions.motorEn1 = p; })} />
+          <span>L293D EN2 (DCM2 speed)</span><EnableSelect value={a.motorEn2} onChange={(p) => set((c) => { c.assumptions.motorEn2 = p; })} />
           <span>L293D IN1</span><PinSelect value={a.motorIn1} onChange={(p) => set((c) => { c.assumptions.motorIn1 = p; })} />
           <span>L293D IN2</span><PinSelect value={a.motorIn2} onChange={(p) => set((c) => { c.assumptions.motorIn2 = p; })} />
           <span>POT channel</span>
@@ -113,9 +163,11 @@ function PicHardware() {
           <span>LED polarity</span>
           <select value={a.ledActiveHigh ? 'h' : 'l'} onChange={(e) => set((c) => { c.assumptions.ledActiveHigh = e.target.value === 'h'; })}><option value="h">Active high</option><option value="l">Active low</option></select>
           <span>Motor (no-load)</span>
-          <select value={a.motorRatedRpm} onChange={(e) => set((c) => { c.assumptions.motorRatedRpm = +e.target.value; })}>{[100, 300, 500, 1000, 3000].map((r) => <option key={r} value={r}>{r} rpm @ 12 V</option>)}</select>
+          <select value={a.motorRatedRpm} onChange={(e) => set((c) => { c.assumptions.motorRatedRpm = +e.target.value; })}>{[100, 150, 200, 300, 500].map((r) => <option key={r} value={r}>{r} rpm @ 5 V</option>)}</select>
         </div>
+        <button className="btn chart-btn" onClick={() => setChart(true)}><Icon name="board" size={13} /> View board connection chart</button>
       </div>
+      {chart && <ChartViewer onClose={() => setChart(false)} />}
     </>
   );
 }

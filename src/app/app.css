@@ -50,6 +50,23 @@
 @keyframes pane-in-right { from { opacity: 0; transform: translateX(12px) scale(0.98); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .glass-pane.left, .glass-pane.right { animation: none; } .pane-handle { transition: none; } }
 
+/* PICT board connection chart (Hardware tab) */
+.chart-btn { margin-top: 12px; width: 100%; justify-content: center; }
+.chart-viewer {
+  position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 24px;
+  background: rgba(5, 7, 10, 0.72); backdrop-filter: blur(3px); animation: chart-in 0.16s ease-out;
+}
+.chart-viewer figure {
+  margin: 0; display: flex; flex-direction: column; max-width: min(1100px, 100%); max-height: 100%;
+  border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--bg-1); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+}
+.chart-viewer figcaption { display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 14px; font-size: 12.5px; color: var(--fg-2); border-bottom: 1px solid var(--line-soft); }
+.chart-viewer figcaption b { color: var(--fg-0); }
+.chart-viewer figcaption .btn { margin-left: auto; flex: none; }
+.chart-viewer img { display: block; max-width: 100%; max-height: calc(100vh - 110px); object-fit: contain; background: #fff; }
+@keyframes chart-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .chart-viewer { animation: none; } }
+
 /* the 3D view's own overlays step aside for an open side pane */
 .ws-stage .board-toolbar { transition: left 0.22s ease; }
 .ws-stage .wf { transition: right 0.22s ease; }
@@ -104,6 +121,7 @@
 .la-side select { width: 100%; }
 .la-ctl { display: flex; gap: 6px; }
 .la-ctl select { flex: 1; }
+.la-add { display: flex; flex-direction: column; gap: 4px; }
 .la-canvas { flex: 1; min-width: 0; height: 100%; display: block; }
 
 /* ---------------- debug panels ---------------- */

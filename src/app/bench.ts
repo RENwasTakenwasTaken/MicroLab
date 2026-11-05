@@ -5,11 +5,11 @@
 
 import { create } from 'zustand';
 import type { PicBoardConfig } from '../sim/board/types.ts';
-import { SOCKET, type V3 } from '../lab3d/world.ts';
+import { SOCKET, boardToWorld, type V3 } from '../lab3d/world.ts';
 import { sim } from './sim.ts';
 import { useLab } from './store.ts';
 
-export type PlugKind = 'frc' | 'usb' | 'probe';
+export type PlugKind = 'frc' | 'usb' | 'probe' | 'dcm';
 
 export interface Plug {
   id: string;
@@ -27,7 +27,7 @@ export interface ScopeSettings { vdiv: [number, number]; sdiv: number; running: 
 export interface DmmSettings { on: boolean; mode: 'V' | 'OHM' | 'HZ' | 'UA' | 'MA' | 'A' | 'TEMP' }
 export interface GenSettings { on: boolean; freq: number; wave: 'sine' | 'triangle' | 'square'; amp: number }
 
-export type UploadPhase = 'idle' | 'compiling' | 'compile-error' | 'built' | 'waiting' | 'erasing' | 'programming' | 'verifying' | 'done' | 'error';
+export type UploadPhase = 'idle' | 'compiling' | 'compile-error' | 'built' | 'blocked' | 'nodevice' | 'erasing' | 'programming' | 'verifying' | 'done' | 'error';
 export interface UploadState { phase: UploadPhase; progress: number; log: string[]; error?: string }
 
 export const DMM_MODES: DmmSettings['mode'][] = ['V', 'OHM', 'HZ', 'UA', 'MA', 'A', 'TEMP'];
@@ -50,33 +50,36 @@ interface BenchState {
   gen: GenSettings;
   dmmAc: boolean;
   upload: UploadState;
-  toast: { text: string; kind: 'ok' | 'err' | 'info'; at: number } | null;
+  toast: { text: string; kind: 'ok' | 'err' | 'info'; at: number; ms: number } | null;
   setView(v: ViewMode): void;
   set(p: Partial<BenchState>): void;
   pick(plugId: string): void;
   attach(plugId: string, socketId: string): boolean;
   drop(at: V3): void;
-  notify(text: string, kind?: 'ok' | 'err' | 'info'): void;
+  notify(text: string, kind?: 'ok' | 'err' | 'info', ms?: number): void;
 }
 
 /** Desk spots where loose ribbon ends rest (world mm). */
 const restSpots: V3[] = [[-150, -2, 140], [-120, -2, 150], [-90, -2, 160], [-60, -2, 170], [-30, -2, 180], [0, -2, 190], [30, -2, 200], [60, -2, 205]];
 
-function initialPlugs(cables: PicBoardConfig['cables']): Record<string, Plug> {
+/** Every cable starts loose on the desk: connecting them is part of the experiment. */
+function initialPlugs(): Record<string, Plug> {
   const plugs: Record<string, Plug> = {};
   const add = (p: Plug) => { plugs[p.id] = p; };
-  // four 10-way FRC ribbons, wired as the experiment's default configuration
-  const used = Object.entries(cables).filter(([, port]) => port !== null) as [keyof PicBoardConfig['cables'], number][];
   for (let i = 0; i < 4; i++) {
-    const conn = used[i];
-    add({ id: `rib${i}:a`, kind: 'frc', cable: `rib${i}`, label: `Ribbon ${i + 1} (end A)`, attachedTo: conn ? PORT_SOCKETS[conn[1]] : null, rest: restSpots[i * 2] });
-    add({ id: `rib${i}:b`, kind: 'frc', cable: `rib${i}`, label: `Ribbon ${i + 1} (end B)`, attachedTo: conn ? `frc:${conn[0]}` : null, rest: restSpots[i * 2 + 1] });
+    add({ id: `rib${i}:a`, kind: 'frc', cable: `rib${i}`, label: `Ribbon ${i + 1} (end A)`, attachedTo: null, rest: restSpots[i * 2] });
+    add({ id: `rib${i}:b`, kind: 'frc', cable: `rib${i}`, label: `Ribbon ${i + 1} (end B)`, attachedTo: null, rest: restSpots[i * 2 + 1] });
   }
   add({ id: 'usb:b', kind: 'usb', cable: 'usb', label: 'USB Type-B plug', attachedTo: null, rest: [-175, -1, -45] });
-  add({ id: 'ch1', kind: 'probe', cable: 'ch1', label: 'Scope CH1 probe', attachedTo: null, rest: [250, 2, -170] });
-  add({ id: 'ch2', kind: 'probe', cable: 'ch2', label: 'Scope CH2 probe', attachedTo: null, rest: [300, 2, -150] });
+  // oscilloscope: each crocodile clip holds a male-to-female jumper whose female end goes on a header pin
+  add({ id: 'ch1', kind: 'probe', cable: 'ch1', label: 'Scope CH1 probe (clip + jumper)', attachedTo: null, rest: [250, 2, -170] });
+  add({ id: 'ch2', kind: 'probe', cable: 'ch2', label: 'Scope CH2 probe (clip + jumper)', attachedTo: null, rest: [300, 2, -150] });
+  add({ id: 'scope:gnd', kind: 'probe', cable: 'scopeGnd', label: 'Scope probe ground (clip + jumper)', attachedTo: null, rest: [215, 2, -185] });
+  // the gear motor's female jumper wires (fixed to the motor's relimate at their other end)
+  add({ id: 'mot:1', kind: 'dcm', cable: 'mot1', label: 'Motor wire (red, motor pin 1)', attachedTo: null, rest: boardToWorld(62, -6, -1.5) });
+  add({ id: 'mot:2', kind: 'dcm', cable: 'mot2', label: 'Motor wire (black, motor pin 2)', attachedTo: null, rest: boardToWorld(66, -6, -1.5) });
   add({ id: 'dmm:v', kind: 'probe', cable: 'dmmV', label: 'DMM red lead (VΩHz)', attachedTo: null, rest: [215, 2, 90] });
-  add({ id: 'dmm:com', kind: 'probe', cable: 'dmmCom', label: 'DMM black lead (COM)', attachedTo: 'tp:0:GND', rest: [200, 2, 105] });
+  add({ id: 'dmm:com', kind: 'probe', cable: 'dmmCom', label: 'DMM black lead (COM)', attachedTo: null, rest: [200, 2, 105] });
   return plugs;
 }
 
@@ -93,18 +96,28 @@ export function ribbonMapping(plugs: Record<string, Plug>): PicBoardConfig['cabl
   return cables;
 }
 
+/** Motor jumper wires -> PicBoardConfig.motorLink: ±connector number (sign = polarity), 0 = not connected. */
+export function motorLink(plugs: Record<string, Plug>): number {
+  const a = plugs['mot:1']?.attachedTo, b = plugs['mot:2']?.attachedTo;
+  const da = a ? SOCKET[a]?.dcm : undefined, db = b ? SOCKET[b]?.dcm : undefined;
+  if (!da || !db || da.conn !== db.conn || da.pin === db.pin) return 0;
+  return da.conn * (da.pin === 1 ? 1 : -1);
+}
+
 function syncElectrical(plugs: Record<string, Plug>) {
   const lab = useLab.getState();
   if (lab.arch !== 'pic18') return;
-  const cfg = structuredClone(lab.boardCfg) as PicBoardConfig;
+  const old = lab.boardCfg as PicBoardConfig;
+  const cfg = structuredClone(old);
   cfg.cables = ribbonMapping(plugs);
-  if (JSON.stringify(cfg.cables) === JSON.stringify((lab.boardCfg as PicBoardConfig).cables)) return;
+  cfg.motorLink = motorLink(plugs);
+  if (JSON.stringify(cfg.cables) === JSON.stringify(old.cables) && cfg.motorLink === (old.motorLink ?? 1)) return;
   lab.set({ boardCfg: cfg });
   sim.input({ kind: 'config', cfg: structuredClone(cfg) });
 }
 
 export const useBench = create<BenchState>((set, get) => ({
-  plugs: initialPlugs({ LBANK: 3, KEY: null, LCD_DATA: null, LCD_CTRL: null }),
+  plugs: initialPlugs(),
   carrying: null,
   snap: null,
   view: 'lab',
@@ -119,7 +132,7 @@ export const useBench = create<BenchState>((set, get) => ({
 
   setView: (view) => set({ view, viewNonce: get().viewNonce + 1 }),
   set: (p) => set(p),
-  notify: (text, kind = 'info') => set({ toast: { text, kind, at: Date.now() } }),
+  notify: (text, kind = 'info', ms = 2500) => set({ toast: { text, kind, at: Date.now(), ms } }),
 
   pick(plugId) {
     const plugs = { ...get().plugs };
@@ -150,7 +163,8 @@ export const useBench = create<BenchState>((set, get) => ({
     plugs[plugId] = { ...p, attachedTo: socketId };
     set({ plugs, carrying: null, snap: null });
     syncElectrical(plugs);
-    get().notify(`${p.label} → ${s.label}`, 'ok');
+    if (p.kind === 'usb') get().notify('USB cable connected successfully', 'ok', 4000);
+    else get().notify(`${p.label} → ${s.label}`, 'ok');
     return true;
   },
 
@@ -163,10 +177,10 @@ export const useBench = create<BenchState>((set, get) => ({
   },
 }));
 
-/** Reset the bench cabling to an experiment's default FRC configuration. */
-export function resetBench(cables: PicBoardConfig['cables']) {
+/** Put every cable back on the desk for a fresh experiment. */
+export function resetBench() {
   useBench.setState({
-    plugs: initialPlugs(cables), carrying: null, view: 'lab', viewNonce: useBench.getState().viewNonce + 1, latched: {},
+    plugs: initialPlugs(), carrying: null, view: 'lab', viewNonce: useBench.getState().viewNonce + 1, latched: {},
     upload: { phase: 'idle', progress: 0, log: [] },
   });
 }

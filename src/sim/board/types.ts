@@ -20,17 +20,23 @@ export const pinName = (arch: 'pic18' | 'mcs51', p: PinRef) =>
 export type FrcTarget = 'LBANK' | 'KEY' | 'LCD_DATA' | 'LCD_CTRL';
 
 /**
- * Electrical assumptions for the Smart Logic Technologies "EXCEL PIC V1.0" trainer.
- * None of these come from a schematic: they are inferred from silkscreen labels and
- * common SPPU lab programs, and are flagged as UNVERIFIED in the UI.
+ * Pin connections of the Smart Logic Technologies "EXCEL PIC V1.0" trainer. The defaults
+ * follow PICT's "Explore Board Connections" chart (Embedded System Lab A3-206, PIC18F4550
+ * column); the Hardware tab lets a board that differs be described.
  */
 export interface PicAssumptions {
   sw0: PinRef;
   sw1: PinRef;
   relay: PinRef;
   buzzer: PinRef;
-  /** L293D enable: null = tied to VCC through DCM_SW-1 */
-  motorEn: PinRef | null;
+  /** RGB LED anodes (through PERI_SW 1-3) */
+  rgbRed: PinRef;
+  rgbGreen: PinRef;
+  rgbBlue: PinRef;
+  /** L293D EN1 (channels 1-2, DCM1) and EN2 (channels 3-4, DCM2): PWM speed inputs, normally a CCP pin. null = tied to VCC */
+  motorEn1: PinRef | null;
+  motorEn2: PinRef | null;
+  /** L293D IN1/IN2: direction of the DCM1 motor */
   motorIn1: PinRef;
   motorIn2: PinRef;
   potChannel: number;
@@ -50,10 +56,16 @@ export interface PicBoardConfig {
   assumptions: PicAssumptions;
   dips: {
     pb: boolean[]; // PUSH BUTTON INTERFACE 2-way: SW0, SW1 -> port pins
-    periph: boolean[]; // relay/buzzer 6-way: 1 = relay, 2 = buzzer
-    dcm: boolean[]; // DCM_SW 6-way: 1 = EN, 2 = IN1, 3 = IN2
+    periph: boolean[]; // PERI_SW 6-way: 1-3 = RGB LED red/green/blue, 4 = relay, 5 = buzzer
+    dcm: boolean[]; // DCM_SW 6-way: 1 = EN1, 2 = IN1, 3 = IN2, 4 = EN2
     analog: boolean[]; // ANALOG INP 2-way: 1 = POT, 2 = LM35
   };
+  /**
+   * The external gear motor's jumper wires: ±1 = on DCM1 (L293D OUT1/OUT2), ±2 = on DCM2
+   * (OUT3/OUT4), the sign giving the polarity (negative = wires swapped); 0 = not connected.
+   * Omitted = wired to DCM1 (the simulator's stand-alone default).
+   */
+  motorLink?: number;
 }
 
 export interface Mcs51BoardConfig {
@@ -84,7 +96,8 @@ export interface PicBoardSnapshot {
   relay: boolean;
   relaySwitches: number;
   buzzer: number; // drive duty 0..1
-  motor: { rpm: number; drive: number; dutyIn1: number; dutyIn2: number };
+  rgb: [number, number, number]; // RGB LED red/green/blue brightness 0..1
+  motor: { rpm: number; drive: number; dutyEn1: number; dutyEn2: number; dutyIn1: number; dutyIn2: number };
   pot: number;
   potVolts: number;
   temperature: number;
