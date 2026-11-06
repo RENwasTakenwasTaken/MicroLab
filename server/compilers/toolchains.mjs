@@ -3,7 +3,7 @@
 // diagnostics, a tool-style build log and debug info (line map + symbols).
 
 import { execFile } from 'node:child_process';
-import { existsSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -55,58 +55,6 @@ export function locateToolchains() {
   return { xc8, sdcc };
 }
 
-// ------------------------------------------------------------ diagnostics
-const mode = (p) => { try { return (statSync(p).mode & 0o777).toString(8).padStart(3, '0'); } catch { return null; } };
-
-/** Directory names (not files) below `dir`, so the layout on the host can be checked without shell access. */
-function listDirs(dir, depth, base = dir, out = []) {
-  if (depth < 0 || out.length >= 300) return out;
-  let entries = [];
-  try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return out; }
-  for (const e of entries) {
-    if (!e.isDirectory() || e.name === 'node_modules' || e.name === 'include') continue;
-    const p = path.join(dir, e.name);
-    out.push(path.relative(base, p));
-    listDirs(p, depth - 1, base, out);
-  }
-  return out;
-}
-
-/** Why XC8 is (not) usable: the environment the app sees, paths, permissions and the compiler's own output. */
-export async function toolchainDiagnostics() {
-  const { xc8 } = locateToolchains();
-  const d = {
-    appRoot: APP_ROOT,
-    env: { XC8_CC: process.env.XC8_CC ?? '(not set)', XC8_DFP: process.env.XC8_DFP ?? '(not set)' },
-    serverFolders: listDirs(path.join(APP_ROOT, 'server'), 5),
-    xc8: null, dfp: null, hints: [],
-  };
-  if (!xc8) d.hints.push('XC8_CC is not set for the app (Setup Node.js App -> Environment variables, then Save and Restart).');
-  else {
-    const exists = existsSync(xc8);
-    d.xc8 = { resolvedPath: xc8, exists, mode: mode(xc8) };
-    if (!exists) d.hints.push('XC8_CC points to a file that does not exist: compare resolvedPath with serverFolders.');
-    else {
-      const root = path.resolve(path.dirname(xc8), '..');
-      const notExec = [];
-      // Windows has no execute bit; the check only means something on the Linux host
-      for (const sub of process.platform === 'win32' ? [] : ['bin', 'pic/bin', 'pic-as/bin']) {
-        try { for (const f of readdirSync(path.join(root, sub))) { const m = mode(path.join(root, sub, f)); if (m && !f.endsWith('.xml') && !(parseInt(m, 8) & 0o100)) notExec.push(`${sub}/${f} (${m})`); } } catch { /* folder absent */ }
-      }
-      d.xc8.notExecutable = notExec;
-      if (notExec.length) d.hints.push('Some compiler programs lack execute permission: set 755 on every file in bin/, pic/bin/ and pic-as/bin/.');
-      const r = await run(xc8, ['--version'], tmpdir(), 20_000);
-      d.xc8.versionRun = { exitCode: r.code, error: r.error, output: r.out.slice(0, 800) };
-    }
-  }
-  const dfp = envPath('XC8_DFP');
-  if (dfp) {
-    d.dfp = { resolvedPath: dfp, exists: existsSync(dfp), has18F4550: existsSync(path.join(dfp, 'pic', 'include', 'proc', 'pic18f4550.h')) };
-    if (!d.dfp.has18F4550) d.hints.push('XC8_DFP must point at the device pack\'s "xc8" folder (the one containing pic/include/proc/pic18f4550.h).');
-  }
-  return d;
-}
-
 export async function toolchainInfo() {
   const { xc8, sdcc } = locateToolchains();
   const info = { xc8: null, sdcc: null };
@@ -114,7 +62,6 @@ export async function toolchainInfo() {
   if (xc8 && existsSync(xc8)) {
     const r = await run(xc8, ['--version'], tmpdir(), 20_000);
     const v = r.out.match(/V\d+\.\d+/i);
-    // version only: /api/toolchains is public, so the install path stays on the server
     if (v) info.xc8 = { version: v[0] };
   }
   if (sdcc && existsSync(sdcc)) {

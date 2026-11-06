@@ -139,10 +139,6 @@ export function Workspace({ expId }: { expId: string }) {
     useLab.getState().set({ bottomOpen: false });
     return () => useLab.getState().set({ bottomOpen: true });
   }, [coding]);
-  useEffect(() => {
-    if (useLab.getState().toolchains) return;
-    fetch('/api/toolchains').then((r) => r.json()).then((t) => useLab.getState().set({ toolchains: t })).catch(() => useLab.getState().set({ toolchains: { xc8: null, sdcc: null } }));
-  }, []);
 
   if (narrow) {
     const tabs = ([['lab', 'Lab', 'flask'], ['code', 'Code', 'file'], ['board', isPic ? 'Bench' : 'Board', 'board'], ['output', 'Output', 'terminal'], ['debug', 'Debug', 'bug']] as const).filter((t) => !isPic || t[0] !== 'code');

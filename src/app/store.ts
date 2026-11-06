@@ -84,7 +84,6 @@ interface LabState {
    * scene renders at 1x pixel density.
    */
   perfMode: boolean;
-  toolchains: { xc8: { version: string } | null; sdcc: { version: string } | null } | null;
 
   setRoute(r: LabState['route']): void;
   setSource(id: string, src: string): void;
@@ -126,7 +125,6 @@ export const useLab = create<LabState>((set, get) => ({
   speed: 1,
   editorFont: load<number>(LS_FONT, EDITOR_FONT.default),
   perfMode: load<boolean>(LS_PERF, false),
-  toolchains: null,
 
   setRoute: (route) => set({ route }),
   setSource: (id, src) => {

@@ -208,7 +208,6 @@ table.conn td { font-size: 11.5px; vertical-align: top; padding-top: 4px; paddin
 .brand-name { font-weight: 700; font-size: 16px; }
 .brand-name span { font-weight: 500; color: var(--fg-2); margin-left: 6px; font-size: 14px; }
 .brand-sub { font-size: 11.5px; color: var(--fg-3); }
-.tc-status { display: flex; gap: 6px; }
 .home-main { max-width: 1240px; margin: 0 auto; padding: 32px 28px 60px; }
 .home-intro h1 { font-size: 30px; letter-spacing: -0.02em; margin: 0 0 10px; }
 .home-intro p { max-width: 760px; color: var(--fg-1); font-size: 14.5px; line-height: 1.6; margin: 0; }

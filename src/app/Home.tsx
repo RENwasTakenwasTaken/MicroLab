@@ -1,16 +1,11 @@
-// Lab index: experiment list grouped by course outcome, toolchain status.
+// Lab index: experiment list grouped by course outcome.
 
-import { useEffect, useState } from 'react';
 import { EXPERIMENTS } from '../experiments/experiments.ts';
 import { useLab } from './store.ts';
 import { Icon } from '../ui/icons.tsx';
 
 export function Home() {
-  const [tc, setTc] = useState<{ xc8: { version: string } | null; sdcc: { version: string } | null } | null | 'down'>(null);
   const sources = useLab((s) => s.sources);
-  useEffect(() => {
-    fetch('/api/toolchains').then((r) => r.json()).then((t) => { setTc(t); useLab.getState().set({ toolchains: t }); }).catch(() => setTc('down'));
-  }, []);
   return (
     <div className="home">
       <header className="home-head">
@@ -23,16 +18,6 @@ export function Home() {
           
         </div>
         
-        <div className="tc-status">
-          {tc === null && <span className="tag"><span className="spinner" /> checking toolchains</span>}
-          {tc === 'down' && <span className="tag err" title="Run: npm run dev">build server offline</span>}
-          {/* {tc && tc !== 'down' && (
-            <>
-              <span className={`tag ${tc.xc8 ? 'ok' : 'err'}`}>MPLAB XC8 {tc.xc8?.version ?? 'missing'}</span>
-              <span className={`tag ${tc.sdcc ? 'ok' : 'err'}`}>SDCC {tc.sdcc?.version ?? 'missing'}</span>
-            </>
-          )} */}
-        </div>
       </header>
 
       <main className="home-main">
