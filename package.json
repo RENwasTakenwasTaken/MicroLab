@@ -13,7 +13,7 @@
     "test:sim": "node tests/run-all.mjs",
     "test:debug": "node tests/debugger.mjs",
     "test:ui": "node tests/ui-smoke.mjs",
-    "test": "node tests/run-all.mjs && node tests/debugger.mjs",
+    "test": "node tests/run-all.mjs && node tests/debugger.mjs && node tests/security.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

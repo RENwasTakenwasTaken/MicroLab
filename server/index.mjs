@@ -7,7 +7,7 @@ import { createServer } from 'node:http';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { compile8051, compilePic18, toolchainDiagnostics, toolchainInfo } from './compilers/toolchains.mjs';
+import { compile8051, compilePic18, locateToolchains, toolchainDiagnostics, toolchainInfo } from './compilers/toolchains.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.PORT ?? (process.argv.includes('--serve-dist') || process.env.SERVE_DIST === '1' ? 8080 : 5174));
@@ -75,7 +75,8 @@ const server = createServer(async (req, res) => {
 
 server.listen(PORT, async () => {
   const tc = await getInfo();
+  const where = locateToolchains(); // paths for the local console only (not the public endpoint)
   console.log(`[vlab] build server on http://localhost:${PORT}`);
-  console.log(`[vlab] XC8 : ${tc.xc8 ? `${tc.xc8.version}  (${tc.xc8.path})` : 'NOT FOUND'}`);
-  console.log(`[vlab] SDCC: ${tc.sdcc ? `${tc.sdcc.version}  (${tc.sdcc.path})` : 'NOT FOUND'}`);
+  console.log(`[vlab] XC8 : ${tc.xc8 ? `${tc.xc8.version}  (${where.xc8})` : 'NOT FOUND'}`);
+  console.log(`[vlab] SDCC: ${tc.sdcc ? `${tc.sdcc.version}  (${where.sdcc})` : 'NOT FOUND'}`);
 });

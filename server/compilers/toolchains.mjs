@@ -10,6 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readDwarfLines } from './dwarf.mjs';
 import { c18ToXc8, keilToSdcc } from './compat.mjs';
+import { checkSource, rejectedBuild } from '../security.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const INCLUDE = path.resolve(here, '..', 'include');
@@ -113,12 +114,13 @@ export async function toolchainInfo() {
   if (xc8 && existsSync(xc8)) {
     const r = await run(xc8, ['--version'], tmpdir(), 20_000);
     const v = r.out.match(/V\d+\.\d+/i);
-    if (v) info.xc8 = { path: xc8, version: v[0] };
+    // version only: /api/toolchains is public, so the install path stays on the server
+    if (v) info.xc8 = { version: v[0] };
   }
   if (sdcc && existsSync(sdcc)) {
     const r = await run(sdcc, ['--version'], tmpdir(), 20_000);
     const v = r.out.match(/\d+\.\d+\.\d+/);
-    if (v) info.sdcc = { path: sdcc, version: v[0] };
+    if (v) info.sdcc = { version: v[0] };
   }
   return info;
 }
@@ -150,6 +152,8 @@ const now = () => new Date().toLocaleTimeString('en-GB');
 export async function compilePic18(source, opts = {}) {
   const { xc8 } = locateToolchains();
   if (!xc8) return { ok: false, log: 'XC8 compiler not found. Install MPLAB XC8 or set the XC8_CC environment variable.', diagnostics: [] };
+  const problem = checkSource(source);
+  if (problem) return rejectedBuild(problem, 'xc8-cc -mcpu=18F4550 main.c');
   const dir = await mkdtemp(path.join(tmpdir(), 'vlab-pic-'));
   const t0 = Date.now();
   try {
@@ -246,6 +250,8 @@ async function xc8Symbols(dir) {
 export async function compile8051(source, opts = {}) {
   const { sdcc } = locateToolchains();
   if (!sdcc) return { ok: false, log: 'SDCC not found. Install SDCC (sdcc.sourceforge.net) or set the SDCC environment variable.', diagnostics: [] };
+  const problem = checkSource(source);
+  if (problem) return rejectedBuild(problem, 'sdcc -mmcs51 main.c');
   const dir = await mkdtemp(path.join(tmpdir(), 'vlab-51-'));
   const t0 = Date.now();
   try {
