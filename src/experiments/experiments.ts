@@ -11,7 +11,8 @@ import exp5 from './code/exp5_pic_lcd.c?raw';
 import exp6 from './code/exp6_pic_temp.c?raw';
 
 export interface DipReq { bank: keyof PicBoardConfig['dips']; index: number; on: boolean; label: string }
-export interface ProbeReq { plug: 'ch1' | 'ch2' | 'scope:gnd'; pin: string; label: string }
+/** A probe / lead on a header pin: pin label ('RD0', 'GND'), or a list of pins any of which will do. */
+export interface ProbeReq { plug: 'ch1' | 'ch2' | 'scope:gnd' | 'dmm:v' | 'dmm:com'; pin: string | string[]; label: string }
 
 export interface Connection {
   signal: string;
@@ -52,6 +53,8 @@ export interface Experiment {
     switches?: DipReq[];
     /** oscilloscope probe jumpers: plug -> header pin label (e.g. 'RD0') or 'GND' */
     probes?: ProbeReq[];
+    /** multimeter leads (a workflow step just before the USB cable) */
+    dmm?: ProbeReq[];
     /** the gear motor's jumper wires on DCM1 */
     motor?: boolean;
     /** final step: change the LM35 temperature in the Hardware tab while the program runs */
@@ -257,16 +260,21 @@ export const EXPERIMENTS: Experiment[] = [
       'The analog pin must also be an input (TRISA bit = 1): an output pin\'s driver overrides the sensor and the ADC then reads 0 V or 5 V.',
       'Input voltage from the result: $V_{in} = ADC × 5 V / 1023$. LM35 output is 10 mV / °C (0 °C → 0 V), so $T(°C) = ADC × 500 / 1023$; one step is $5 V / 1024 ≈ 4.88 mV ≈ 0.49 °C$.',
     ],
-    hardware: ['EXCEL PIC V1.0 module', 'LM35 at the analog input section (or the trimmer pot on AN2)', '16×2 LCD'],
+    hardware: ['EXCEL PIC V1.0 module', 'LM35 at the analog input section (or the trimmer pot on AN2)', '16×2 LCD', 'MECO 801 DMM on DC volts (checks the analog input voltage)'],
     connections: [
       { signal: 'LM35 Vout', mcuPin: 'RA1 / AN1', board: 'Analog input section (ANALOG INP DIP 2 ON)', verified: true },
       { signal: 'Trimmer pot (alternative input)', mcuPin: 'RA2 / AN2', board: 'Analog input section (ANALOG INP DIP 1 ON)', verified: true },
+      { signal: 'DMM (DC volts)', mcuPin: 'RA1 / RA2, GND', board: 'Red lead on the PORT-A header pin, black lead on a GND pin', verified: true },
       { signal: 'LCD data', mcuPin: 'RD0–RD7', board: 'FRC: PORT-D → LCD_DATA', verified: true },
       { signal: 'RS / RW / EN', mcuPin: 'RE0 / RE1 / RE2', board: 'FRC: PORT-E → LCD_CNTRL', verified: true },
     ],
     board: {
       cables: { LBANK: null, KEY: null, LCD_DATA: 3, LCD_CTRL: 4 },
       tempTask: true,
+      dmm: [
+        { plug: 'dmm:v', pin: ['RA1', 'RA2'], label: 'DMM red lead (VΩHz) → RA1 (LM35) or RA2 (pot) on the PORT-A header' },
+        { plug: 'dmm:com', pin: 'GND', label: 'DMM black lead (COM) → a GND pin' },
+      ],
       // both inputs are switched on: some batches run the program on the LM35, others on the pot
       switches: [
         { bank: 'analog', index: 0, on: true, label: 'ANALOG INP DIP 1 ON (trimmer pot → RA2 / AN2)' },
@@ -276,7 +284,10 @@ export const EXPERIMENTS: Experiment[] = [
     starter: exp6,
     expected: ['Line 1: "Temperature:"', 'Line 2: current temperature, e.g. "027.3°C"', 'Reading follows the LM35 temperature slider within ±0.5 °C'],
     measurements: [{ kind: 'temperature', label: 'LM35' }, { kind: 'lcd', label: 'LCD contents' }],
-    procedure: [...PIC_PROCEDURE, 'With the program running, change the LM35 temperature in the Hardware tab and check that the LCD reading follows it.'],
+    procedure: [
+      ...PIC_PROCEDURE.flatMap((p) => (p.startsWith('Plug the Type-B USB') ? ['Connect the multimeter on DC volts: red lead on RA1 (LM35) or RA2 (pot) on the PORT-A header, black lead on a GND pin.', p] : [p])),
+      'With the program running, change the LM35 temperature in the Hardware tab and check that the LCD reading follows it (and the DMM reads 10 mV per °C on RA1).',
+    ],
   },
   {
     id: 'exp7', no: 7, co: 'CO2', arch: 'esp32', mcu: 'ESP32', status: 'planned',

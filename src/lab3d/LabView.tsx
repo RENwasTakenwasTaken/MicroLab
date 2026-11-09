@@ -261,7 +261,8 @@ function DevProbe() {
 const PORT_NAMES = ['PORT-A', 'PORT-B', 'PORT-C', 'PORT-D', 'PORT-E'];
 
 /** Does a probe jumper sit on the header pin named like the requirement ('RD0', 'GND')? */
-function probeOn(socketId: string | null | undefined, pin: string) {
+function probeOn(socketId: string | null | undefined, pin: string | string[]): boolean {
+  if (Array.isArray(pin)) return pin.some((p) => probeOn(socketId, p));
   const n = socketId ? SOCKET[socketId]?.node : undefined;
   if (!n) return false;
   if (pin === 'GND') return n.kind === 'gnd';
@@ -289,6 +290,7 @@ function useWorkflow(expId: string) {
   const motorOk = cfg.motorLink === 1;
   const switches = (need.switches ?? []).map((d) => ({ ...d, ok: !!cfg.dips?.[d.bank]?.[d.index] === d.on }));
   const probes = (need.probes ?? []).map((p) => ({ ...p, ok: probeOn(plugs[p.plug]?.attachedTo, p.pin) }));
+  const dmm = (need.dmm ?? []).map((p) => ({ ...p, ok: probeOn(plugs[p.plug]?.attachedTo, p.pin) }));
   const inBoot = device?.mode === 'bootloader';
   const flashed = up.phase === 'done' || !!device?.flashed;
   const running = device?.mode === 'running' && !!device.flashed;
@@ -298,6 +300,7 @@ function useWorkflow(expId: string) {
     ...(need.motor ? [{ key: 'motor', text: 'Connect the motor wires to DCM1', done: motorOk }] : []),
     ...(switches.length ? [{ key: 'dips', text: 'Set the DIP switches', done: switches.every((d) => d.ok) }] : []),
     ...(probes.length ? [{ key: 'scope', text: 'Connect the oscilloscope probe', done: probes.every((p) => p.ok) }] : []),
+    ...(dmm.length ? [{ key: 'dmm', text: 'Connect the multimeter', done: dmm.every((p) => p.ok) }] : []),
     { key: 'usb', text: 'Plug the USB cable into the board', done: usb },
     { key: 'boot', text: 'Enter bootloader mode', done: inBoot || flashed },
     { key: 'code', text: 'Write & build the code on the lab computer', done: !!build?.ok && !stale },
@@ -305,7 +308,7 @@ function useWorkflow(expId: string) {
     { key: 'run', text: 'Press RESET to run', done: running },
     ...(need.tempTask ? [{ key: 'temp', text: 'Change the LM35 temperature in the Hardware tab', done: tempAdjusted }] : []),
   ];
-  return { exp, wiring, motorOk, switches, probes, steps, build, up, device, usb, mains, powerSw, tempAdjusted, inBoot, flashed, running, allDone: steps.every((st) => st.done) };
+  return { exp, wiring, motorOk, switches, probes, dmm, steps, build, up, device, usb, mains, powerSw, tempAdjusted, inBoot, flashed, running, allDone: steps.every((st) => st.done) };
 }
 
 /**
@@ -342,7 +345,7 @@ const DIP_NAME: Record<string, string> = { pb: 'Push-button DIP', periph: 'PERI_
 
 function WorkflowGuide({ expId, onPc }: { expId: string; onPc: boolean }) {
   const [open, setOpen] = useState(true);
-  const { exp, wiring, motorOk, switches, probes, steps, build, up, device, usb, mains, powerSw, tempAdjusted, inBoot, flashed, running, allDone } = useWorkflow(expId);
+  const { exp, wiring, motorOk, switches, probes, dmm, steps, build, up, device, usb, mains, powerSw, tempAdjusted, inBoot, flashed, running, allDone } = useWorkflow(expId);
   const power = useFrame((s) => s.frame?.board.power ?? true);
   const seq = device?.bootSeq ?? 'idle';
   const seqN = { idle: 0, reset: 1, 'reset+boot': 2, boot: 3, ready: 4 }[seq];
@@ -351,13 +354,26 @@ function WorkflowGuide({ expId, onPc }: { expId: string; onPc: boolean }) {
   const done = (key: string) => !!steps.find((st) => st.key === key)?.done;
   const title = exp ? `Expt ${exp.no} · ${exp.title}` : 'Experiment';
   const pc = onPc ? ' on-pc' : '';
+  // in computer view the guide must stay below the lab computer's title bar (BUILD / UPLOAD / close),
+  // whose position depends on the window's shape: measure it once the screen has settled
+  const screen = useScreenRect((s) => s.rect);
+  const [pcTop, setPcTop] = useState<number | null>(null);
+  useEffect(() => {
+    if (!onPc || !screen) { setPcTop(null); return; }
+    const id = requestAnimationFrame(() => {
+      const bar = document.querySelector('.pc-title')?.getBoundingClientRect();
+      const view = document.querySelector('.lab-view')?.getBoundingClientRect();
+      if (bar && view) setPcTop(Math.ceil(bar.bottom - view.top) + 10);
+    });
+    return () => cancelAnimationFrame(id);
+  }, [onPc, screen]);
   if (!open) return (
     <button className={`wf-toggle${pc} ${allDone ? 'complete' : ''}`} onClick={() => setOpen(true)} title={`Show the setup guide for ${title}`}>
       <Icon name={allDone ? 'check' : 'list'} /> {allDone ? 'Setup guide · all steps complete' : `Setup guide · step ${next + 1}/${steps.length} · ${steps[next].text}`}
     </button>
   );
   return (
-    <div className={`wf${pc}`}>
+    <div className={`wf${pc}`} style={onPc && pcTop !== null ? { maxHeight: `calc(100% - ${pcTop + 14}px)` } : undefined}>
       <div className="wf-head">
         <div className="wf-title"><b>Setup guide</b><span title={title}>{title}</span></div>
         <button className="btn ghost icon" onClick={() => setOpen(false)} title="Hide the setup guide"><Icon name="x" /></button>
@@ -396,6 +412,14 @@ function WorkflowGuide({ expId, onPc }: { expId: string; onPc: boolean }) {
             Connect the oscilloscope <span className="dim">(female end of each jumper onto the header pin)</span>
             <ul className="wf-sub">
               {probes.map((p) => <li key={p.plug} className={p.ok ? 'ok' : ''}>{p.label}</li>)}
+            </ul>
+          </Step>
+        )}
+        {dmm.length > 0 && (
+          <Step done={done('dmm')} active={is('dmm')}>
+            Connect the multimeter <span className="dim">(dial on V · click a lead on the desk, then a header pin)</span>
+            <ul className="wf-sub">
+              {dmm.map((p) => <li key={p.plug} className={p.ok ? 'ok' : ''}>{p.label}</li>)}
             </ul>
           </Step>
         )}

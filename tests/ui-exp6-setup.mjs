@@ -31,6 +31,11 @@ const steps = await stepTexts();
 console.log('steps:', steps.map((s) => s.slice(0, 44)));
 ok('powering on is the first step', /Power on the board/.test(steps[0]));
 ok('LM35 temperature step is the last one', /LM35 temperature/.test(steps[steps.length - 1]));
+const iDmm = steps.findIndex((s) => /Connect the multimeter/.test(s)), iUsb = steps.findIndex((s) => /USB Type-B/.test(s));
+ok('multimeter step right before the USB step', iDmm >= 0 && iDmm === iUsb - 1);
+await attach('dmm:v', 'tp:2:RA2');
+await attach('dmm:com', 'tp:2:GND');
+ok('DMM on RA2 + GND: multimeter step done', await stepDone('Connect the multimeter'));
 
 // ribbons: PORT-D -> LCD_DATA, PORT-E -> LCD_CNTRL; both analog DIPs ON
 await attach('rib0:a', 'frc:PORT-D'); await attach('rib0:b', 'frc:LCD_DATA');

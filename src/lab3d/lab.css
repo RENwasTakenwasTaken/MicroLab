@@ -44,6 +44,9 @@
 
 /* ---------- workflow guide ---------- */
 .wf { position: absolute; top: 44px; right: 10px; width: 300px; z-index: 20; background: rgba(13, 16, 20, 0.92); border: 1px solid var(--line); border-radius: 9px; font-size: 12px; box-shadow: 0 8px 26px rgba(0, 0, 0, 0.35); backdrop-filter: blur(6px); }
+.wf { display: flex; flex-direction: column; max-height: calc(100% - 58px); }
+.wf > ol { flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+.wf-head, .wf-foot, .wf-done { flex: none; }
 .wf-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 6px 6px 12px; border-bottom: 1px solid var(--line-soft); }
 .wf ol { list-style: none; margin: 0; padding: 8px 12px; display: flex; flex-direction: column; gap: 8px; }
 .wf ol > li { position: relative; padding-left: 26px; color: var(--fg-2); }
@@ -63,7 +66,8 @@
 .wf-phase.error, .wf-phase.compile-error, .wf-phase.blocked, .wf-phase.nodevice { color: var(--red); }
 /* over the lab computer's screen: bottom-right, above the coding overlay */
 .wf.on-pc, .wf-toggle.on-pc { top: auto; bottom: 14px; right: 14px; z-index: 42; }
-.wf.on-pc { max-height: calc(100% - 80px); overflow: auto; }
+/* in computer view the guide stays below the lab computer's title bar (BUILD, UPLOAD, close) */
+.wf.on-pc { max-height: calc(100% - 150px); }
 .wf-title { display: flex; flex-direction: column; min-width: 0; }
 .wf-title span { color: var(--fg-3); font-size: 0.92em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wf-done { margin: 0 12px 8px; padding: 7px 10px; border-radius: 7px; color: var(--accent); background: var(--accent-soft); border: 1px solid rgba(63, 182, 139, 0.35); font-weight: 600; }
