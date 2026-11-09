@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useFrame, useLab } from '../app/store.ts';
 import { sim } from '../app/sim.ts';
+import { mainsConnected, useBench } from '../app/bench.ts';
 import type { FrcTarget, Mcs51BoardConfig, PicBoardConfig, PinRef } from '../sim/board/types.ts';
 import { Icon } from '../ui/icons.tsx';
 
@@ -76,6 +77,8 @@ function PicHardware() {
   const [chart, setChart] = useState(false);
   const cfg = useLab((s) => s.boardCfg) as PicBoardConfig;
   const board = useFrame((s) => (s.frame?.board.kind === 'pic' ? s.frame.board : null));
+  const powerSw = useBench((s) => s.powerSwitch);
+  const mains = useBench((s) => mainsConnected(s.plugs));
   const set = (fn: (c: PicBoardConfig) => void) => { const c = structuredClone(cfg); fn(c); commit(c); };
   const a = cfg.assumptions;
   const used = (port: number, self: FrcTarget) => (Object.entries(cfg.cables) as [FrcTarget, number | null][]).some(([t, p]) => t !== self && p === port);
@@ -114,7 +117,12 @@ function PicHardware() {
         <h4>Environment & analog inputs</h4>
         <div className="field">
           <label>LM35 temperature: <b className="mono">{(board?.temperature ?? 27).toFixed(1)} °C</b> ({((board?.lm35Volts ?? 0.27) * 1000).toFixed(0)} mV)</label>
-          <input type="range" min={-5} max={110} step={0.1} value={board?.temperature ?? 27} onChange={(e) => sim.input({ kind: 'temperature', celsius: +e.target.value })} />
+          <input type="range" min={-5} max={110} step={0.1} value={board?.temperature ?? 27} onChange={(e) => {
+            sim.input({ kind: 'temperature', celsius: +e.target.value });
+            // Expt 6's last step: the temperature is changed while the student's program runs
+            const d = sim.latest?.device;
+            if (d?.mode === 'running' && d.flashed && !useBench.getState().tempAdjusted) useBench.setState({ tempAdjusted: true });
+          }} />
         </div>
         <div className="field" style={{ marginTop: 10 }}>
           <label>Analog POT (AN0): <b className="mono">{(board?.potVolts ?? 2.5).toFixed(2)} V</b></label>
@@ -125,8 +133,8 @@ function PicHardware() {
           <input type="range" min={0} max={1} step={0.01} value={board?.lcdContrast ?? 0.62} onChange={(e) => sim.input({ kind: 'contrast', value: +e.target.value })} />
         </div>
         <div className="hw-row" style={{ marginTop: 10 }}>
-          <span>Board power</span>
-          <button className={`btn ${board?.power === false ? '' : 'active'}`} onClick={() => sim.input({ kind: 'power', on: board?.power === false })}><Icon name="power" /> {board?.power === false ? 'OFF' : 'ON'}</button>
+          <span>Board POWER switch{powerSw && !mains ? <span className="dim"> · adapter not plugged in</span> : null}</span>
+          <button className={`btn ${powerSw ? 'active' : ''}`} onClick={() => useBench.getState().setPowerSwitch(!powerSw)} title="The same switch as the slide switch on the board. The board is powered only when the adapter is also plugged into the wall socket."><Icon name="power" /> {powerSw ? 'ON' : 'OFF'}</button>
         </div>
       </div>
       <div className="section">

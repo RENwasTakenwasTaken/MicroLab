@@ -5,20 +5,15 @@
 //  - <StaticBatch> merges the board's static parts into one mesh per material, so the GPU gets
 //    a few dozen draw calls instead of hundreds. The original meshes stay in the scene, hidden:
 //    three.js still ray-casts hidden objects, so their hover tooltips keep working.
-//  - <PerfRenderer> draws the shadow map once and refreshes it only when something on the
-//    bench changes.
+//  - shadows are switched off (LabView passes shadows={false} to the Canvas; <PerfRenderer>
+//    recompiles the materials when the mode changes).
 //  - BoardScene leaves out resistors, capacitors and diodes; LabView renders at 1x density.
 
 import { useEffect, useRef, type ReactNode } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
+import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { useBench } from '../app/bench.ts';
 import { useLab } from '../app/store.ts';
-
-const shadowHook: { fn: (() => void) | null } = { fn: null };
-/** Ask for one shadow-map redraw (performance mode draws shadows only on request). */
-export const refreshShadows = () => shadowHook.fn?.();
 
 // ------------------------------------------------------------- batching
 function matKey(m: THREE.Material): string {
@@ -115,44 +110,31 @@ export function StaticBatch({ children, tagged = false }: { children: ReactNode;
   useEffect(() => {
     const root = ref.current;
     if (!perf || !root) return;
-    const undo = batchStatic(root, tagged);
-    refreshShadows();
-    return () => { undo(); refreshShadows(); };
+    return batchStatic(root, tagged);
   }, [perf, tagged]);
   return <group ref={ref}>{children}</group>;
 }
 
 // ------------------------------------------------------------- rendering
 /**
- * Static shadows while performance mode is on: the shadow map is drawn once and redrawn only
- * when something on the bench changes. (Frames are still rendered continuously: rendering only
- * on change made the frame rate uneven.)
+ * Shadows are switched off in performance mode (the Canvas gets shadows={false}). Materials
+ * compile their shadow code in or out, so they are recompiled whenever the mode changes.
  */
 export function PerfRenderer() {
   const perf = useLab((s) => s.perfMode);
-  const gl = useThree((s) => s.gl);
-
+  const { gl, scene } = useThree();
+  const first = useRef(true);
   useEffect(() => {
-    const sm = gl.shadowMap;
-    if (!perf) { sm.autoUpdate = true; return; }
-    sm.autoUpdate = false;
-    sm.needsUpdate = true;
-    shadowHook.fn = () => { sm.needsUpdate = true; };
-    const offBench = useBench.subscribe(() => { sm.needsUpdate = true; }); // plugs, cables, held buttons
-    const offLab = useLab.subscribe((s, prev) => { if (s.boardCfg !== prev.boardCfg) sm.needsUpdate = true; }); // DIP levers
-    // textures and late-mounting parts: redraw the shadows once things have settled
-    const timers = [300, 1500].map((ms) => setTimeout(() => { sm.needsUpdate = true; }, ms));
-    return () => {
-      offBench(); offLab();
-      timers.forEach(clearTimeout);
-      shadowHook.fn = null;
-      sm.autoUpdate = true;
-    };
-  }, [perf, gl]);
-
-  useFrame(() => {
-    // the carried plug and its cable move every frame
-    if (perf && useBench.getState().carrying) gl.shadowMap.needsUpdate = true;
-  });
+    if (first.current) { first.current = false; return; }
+    // after the Canvas has applied its new shadows prop
+    const id = requestAnimationFrame(() => {
+      scene.traverse((o) => {
+        const m = (o as THREE.Mesh).material;
+        if (m) for (const mat of Array.isArray(m) ? m : [m]) mat.needsUpdate = true;
+      });
+      gl.shadowMap.needsUpdate = true;
+    });
+    return () => cancelAnimationFrame(id);
+  }, [perf, gl, scene]);
   return null;
 }

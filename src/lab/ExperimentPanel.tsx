@@ -6,6 +6,7 @@ import { getExperiment, type Measurement } from '../experiments/experiments.ts';
 import { pinName } from '../sim/board/types.ts';
 import type { FrameData } from '../sim/protocol.ts';
 import { Icon } from '../ui/icons.tsx';
+import { MathText } from '../ui/MathText.tsx';
 
 function useSmoothed() {
   const store = useRef(new Map<string, number>());
@@ -88,17 +89,16 @@ export function ExperimentPanel({ expId }: { expId: string }) {
           <span className="tag">{exp.mcu}</span>
         </div>
         <h3 className="exp-title">{exp.title}</h3>
-        <p className="muted" style={{ fontSize: 12 }}>{exp.toolchain}</p>
       </div>
       <div className="section">
         <h4>Objective</h4>
-        <p>{exp.objective}</p>
+        <p><MathText text={exp.objective} /></p>
         <h4 style={{ marginTop: 12 }}>Problem statement</h4>
-        <p>{exp.problem}</p>
+        <p><MathText text={exp.problem} /></p>
       </div>
       <div className="section">
         <h4><Icon name="check" size={13} /> Expected vs actual output</h4>
-        <ul className="expect">{exp.expected.map((e) => <li key={e}>{e}</li>)}</ul>
+        <ul className="expect">{exp.expected.map((e) => <li key={e}><MathText text={e} /></li>)}</ul>
         <div className="actual">
           {exp.measurements.map((m) => (
             <div key={m.label} className="actual-row">
@@ -128,11 +128,11 @@ export function ExperimentPanel({ expId }: { expId: string }) {
       </div>
       <div className="section">
         <h4>Theory notes</h4>
-        <ul className="notes">{exp.theory.map((t) => <li key={t}>{t}</li>)}</ul>
+        <ul className="notes">{exp.theory.map((t) => <li key={t}><MathText text={t} /></li>)}</ul>
       </div>
       <div className="section">
         <h4>Procedure</h4>
-        <ol className="notes">{exp.procedure.map((t) => <li key={t}>{t}</li>)}</ol>
+        <ol className="notes">{exp.procedure.map((t) => <li key={t}><MathText text={t} /></li>)}</ol>
       </div>
       <div className="section">
         <h4>Hardware</h4>

@@ -1,15 +1,16 @@
 // Lab-bench state: cables & plugs (what is physically connected where), the
 // instruments' front-panel settings, the view mode and the USB upload process.
-// The electrical consequences (FRC ribbons -> port mapping) are pushed to the
-// simulator so that the 3D scene, the instruments and the MCU always agree.
+// The electrical consequences (FRC ribbons -> port mapping, mains plug + POWER
+// switch -> board power) are pushed to the simulator so that the 3D scene, the
+// instruments and the MCU always agree.
 
 import { create } from 'zustand';
 import type { PicBoardConfig } from '../sim/board/types.ts';
-import { SOCKET, boardToWorld, type V3 } from '../lab3d/world.ts';
+import { DESK_Y, SOCKET, boardToWorld, type V3 } from '../lab3d/world.ts';
 import { sim } from './sim.ts';
 import { useLab } from './store.ts';
 
-export type PlugKind = 'frc' | 'usb' | 'probe' | 'dcm';
+export type PlugKind = 'frc' | 'usb' | 'probe' | 'dcm' | 'ac';
 
 export interface Plug {
   id: string;
@@ -51,7 +52,12 @@ interface BenchState {
   dmmAc: boolean;
   upload: UploadState;
   toast: { text: string; kind: 'ok' | 'err' | 'info'; at: number; ms: number } | null;
+  /** the trainer's POWER slide switch (the board is powered only with the mains plug in too) */
+  powerSwitch: boolean;
+  /** Expt 6: the LM35 temperature was changed in the Hardware tab while the program ran */
+  tempAdjusted: boolean;
   setView(v: ViewMode): void;
+  setPowerSwitch(on: boolean): void;
   set(p: Partial<BenchState>): void;
   pick(plugId: string): void;
   attach(plugId: string, socketId: string): boolean;
@@ -71,6 +77,8 @@ function initialPlugs(): Record<string, Plug> {
     add({ id: `rib${i}:b`, kind: 'frc', cable: `rib${i}`, label: `Ribbon ${i + 1} (end B)`, attachedTo: null, rest: restSpots[i * 2 + 1] });
   }
   add({ id: 'usb:b', kind: 'usb', cable: 'usb', label: 'USB Type-B plug', attachedTo: null, rest: [-175, -1, -45] });
+  // the 12 V adapter: brick on the desk, barrel plug fixed in the board's DC jack, 2-pin mains plug loose beside the brick
+  add({ id: 'ac:plug', kind: 'ac', cable: 'ac', label: 'Adapter mains plug (2-pin)', attachedTo: null, rest: [165, DESK_Y + 9, -455] });
   // oscilloscope: each crocodile clip holds a male-to-female jumper whose female end goes on a header pin
   add({ id: 'ch1', kind: 'probe', cable: 'ch1', label: 'Scope CH1 probe (clip + jumper)', attachedTo: null, rest: [250, 2, -170] });
   add({ id: 'ch2', kind: 'probe', cable: 'ch2', label: 'Scope CH2 probe (clip + jumper)', attachedTo: null, rest: [300, 2, -150] });
@@ -104,6 +112,21 @@ export function motorLink(plugs: Record<string, Plug>): number {
   return da.conn * (da.pin === 1 ? 1 : -1);
 }
 
+/** Adapter's mains plug in the wall socket. */
+export const mainsConnected = (plugs = useBench.getState().plugs) => plugs['ac:plug']?.attachedTo === 'ac:wall';
+/** The trainer has power: mains plug in and the POWER switch ON. */
+export const boardPowered = () => mainsConnected() && useBench.getState().powerSwitch;
+
+let sentPower: boolean | null = null;
+/** Push the board's power state to the simulator when it changes (force: always send). */
+export function syncPower(force = false) {
+  if (useLab.getState().arch !== 'pic18') return;
+  const on = boardPowered();
+  if (!force && on === sentPower) return;
+  sentPower = on;
+  sim.input({ kind: 'power', on });
+}
+
 function syncElectrical(plugs: Record<string, Plug>) {
   const lab = useLab.getState();
   if (lab.arch !== 'pic18') return;
@@ -129,8 +152,16 @@ export const useBench = create<BenchState>((set, get) => ({
   dmmAc: false,
   upload: { phase: 'idle', progress: 0, log: [] },
   toast: null,
+  powerSwitch: false,
+  tempAdjusted: false,
 
   setView: (view) => set({ view, viewNonce: get().viewNonce + 1 }),
+  setPowerSwitch(on) {
+    set({ powerSwitch: on });
+    syncPower();
+    if (on && !mainsConnected()) get().notify('POWER is ON, but the adapter is not plugged into the wall socket', 'info', 4000);
+    else get().notify(on ? 'Board power ON' : 'Board power OFF', on ? 'ok' : 'info');
+  },
   set: (p) => set(p),
   notify: (text, kind = 'info', ms = 2500) => set({ toast: { text, kind, at: Date.now(), ms } }),
 
@@ -141,7 +172,9 @@ export const useBench = create<BenchState>((set, get) => ({
     plugs[plugId] = { ...p, attachedTo: null };
     set({ plugs, carrying: plugId });
     syncElectrical(plugs);
+    syncPower();
     if (p.kind === 'usb' && p.attachedTo) get().notify('USB cable unplugged from the board', 'info');
+    if (p.kind === 'ac' && p.attachedTo) get().notify('Adapter unplugged from the mains: the board has no power', 'info');
   },
 
   attach(plugId, socketId) {
@@ -163,7 +196,9 @@ export const useBench = create<BenchState>((set, get) => ({
     plugs[plugId] = { ...p, attachedTo: socketId };
     set({ plugs, carrying: null, snap: null });
     syncElectrical(plugs);
+    syncPower();
     if (p.kind === 'usb') get().notify('USB cable connected successfully', 'ok', 4000);
+    else if (p.kind === 'ac') get().notify(get().powerSwitch ? 'Adapter plugged in: board power ON' : 'Adapter plugged into the wall socket: now switch the board\'s POWER switch ON', 'ok', 4000);
     else get().notify(`${p.label} → ${s.label}`, 'ok');
     return true;
   },
@@ -177,12 +212,13 @@ export const useBench = create<BenchState>((set, get) => ({
   },
 }));
 
-/** Put every cable back on the desk for a fresh experiment. */
+/** Put every cable back on the desk for a fresh experiment: unplugged and switched OFF. */
 export function resetBench() {
   useBench.setState({
     plugs: initialPlugs(), carrying: null, view: 'lab', viewNonce: useBench.getState().viewNonce + 1, latched: {},
-    upload: { phase: 'idle', progress: 0, log: [] },
+    upload: { phase: 'idle', progress: 0, log: [] }, powerSwitch: false, tempAdjusted: false,
   });
+  syncPower(true);
 }
 
 export const usbConnected = () => useBench.getState().plugs['usb:b']?.attachedTo === 'usb:board';

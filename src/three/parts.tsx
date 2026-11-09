@@ -186,17 +186,6 @@ export function Jumper({ n, cap = 0 }: { n: number; cap?: number }) {
   );
 }
 
-export function Icsp() {
-  const pts = useMemo(() => Array.from({ length: 6 }, (_, i): V3 => [-6.35 + i * 2.54, 1.6, -6]), []);
-  return (
-    <group>
-      <Box p={[0, 3.3, 0]} s={[16, 6.6, 5.5]} m={MAT.white} />
-      <Box p={[0, 3.3, -2.8]} s={[14.6, 5, 0.2]} m={MAT.cavity} />
-      <Pins points={pts} size={[0.64, 0.64, 12]} m={MAT.gold} />
-    </group>
-  );
-}
-
 // ------------------------------------------------------------ passives
 const BAND_COLORS = ['#7a4a1f', '#111', '#d22', '#c8a53c'];
 export function Resistor() {

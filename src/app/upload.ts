@@ -3,7 +3,7 @@
 // checks the real simulator state; nothing is reported as done unless it is.
 
 import { build, sim } from './sim.ts';
-import { useBench, usbConnected, type UploadPhase } from './bench.ts';
+import { boardPowered, useBench, usbConnected, type UploadPhase } from './bench.ts';
 import { sourceFor, useFrame, useLab } from './store.ts';
 import type { FromWorker } from '../sim/protocol.ts';
 
@@ -52,7 +52,9 @@ const BOOT_TIP = "Tip: Enter PIC's bootloader mode to allow computer to upload p
 function noDevice() {
   setUpload('nodevice');
   log('Device not detected (USB HID Bootloader, VID 0x04D8 / PID 0x003C).');
-  useBench.getState().notify(usbConnected() ? BOOT_TIP : `${BOOT_TIP} (connect the USB cable first)`, 'info', 6000);
+  const hint = !boardPowered() ? ' (the board has no power: plug the adapter into the wall socket and switch POWER ON)'
+    : !usbConnected() ? ' (connect the USB cable first)' : '';
+  useBench.getState().notify(BOOT_TIP + hint, 'info', 6000);
 }
 
 /** Compiles into the lab computer's log; null when the build failed or was superseded. */

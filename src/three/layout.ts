@@ -21,7 +21,7 @@ export type Part = Base & (
   | { kind: 'socket'; pins: number }
   | { kind: 'header'; n: number; rows?: 1 | 2; female?: boolean }
   | { kind: 'boxHeader'; color: 'black' | 'white'; frc?: FrcTarget | PortFrc }
-  | { kind: 'tact'; cap: 'white' | 'black'; input?: string; size?: number }
+  | { kind: 'tact'; cap: 'white' | 'black' | 'silver'; input?: string; size?: number }
   | { kind: 'dipSwitch'; n: number; bank?: 'pb' | 'periph' | 'dcm' | 'analog' }
   | { kind: 'led'; color: 'red' | 'green' | 'yellow'; d?: 3 | 5; signal?: string }
   | { kind: 'rgbLed' }
@@ -43,7 +43,6 @@ export type Part = Base & (
   | { kind: 'slide'; input?: 'power' }
   | { kind: 'jumper'; n: number; cap?: number }
   | { kind: 'relimate'; n: number }
-  | { kind: 'icsp' }
   | { kind: 'screw' }
   | { kind: 'qfn'; size: number }
   | { kind: 'sip'; n: number }
@@ -70,7 +69,7 @@ const ledY = [2.2, 6, 9.6, 13.3, 17, 20.8, 24.5, 28.3];
 
 export const PARTS: Part[] = [
   // ------------------------------------------------------------ power
-  { kind: 'dcJack', x: 9, y: 9.5, rot: 180, name: '12 VDC input', info: 'Base board DC input jack (12 V adapter).' },
+  { kind: 'dcJack', x: 9, y: 9.5, rot: 0, name: '12 VDC input', info: 'Base board DC input jack: the 12 V adapter\'s barrel plug. The adapter brick lies behind the kit; its 2-pin plug goes into the wall socket.' },
   { kind: 'slide', id: 'power', input: 'power', x: 18.5, y: 11, rot: 90, name: 'Power switch', info: 'ON / OFF slide switch. Click to toggle board power.' },
   { kind: 'regulator', x: 3, y: 25, rot: 90, name: 'U1 7805', info: '5 V linear regulator with heatsink.' },
   { kind: 'capE', x: 12.5, y: 19.5, d: 6.3, h: 11, color: '#1d3f8f', name: 'C3 1000 µF' },
@@ -192,19 +191,18 @@ export const PARTS: Part[] = [
   { kind: 'screw', x: 3, y: 185 },
 
   // ======================================================= PIC MODULE
-  { onModule: true, kind: 'dcJack', x: 7.5, y: 57, rot: 180, name: '9–12 V DC-IN (module)' },
+  { onModule: true, kind: 'dcJack', x: 7.5, y: 57, rot: 0, name: '9–12 V DC-IN (module)' },
   { onModule: true, kind: 'header', n: 18, female: true, x: 39.8, y: 52.6, rot: 0, name: 'CN1' },
   { onModule: true, kind: 'boxHeader', color: 'white', frc: 'PORT-B', x: 29, y: 62.9, rot: 0, name: 'PORT-B FRC', info: 'PORT-B 10-pin FRC: pins 1–8 = RB0–RB7, 9 = GND, 10 = VCC.' },
   { onModule: true, kind: 'boxHeader', color: 'white', frc: 'PORT-D', x: 54.5, y: 62.9, rot: 0, name: 'PORT-D FRC', info: 'PORT-D 10-pin FRC: RD0–RD7, GND, VCC.' },
   { onModule: true, kind: 'header', n: 10, x: 31, y: 74, rot: 0, name: 'PORT-B pins' },
   { onModule: true, kind: 'header', n: 10, x: 57.5, y: 74, rot: 0, name: 'PORT-D pins' },
-  { onModule: true, kind: 'led', color: 'green', d: 3, x: 69, y: 54.2, signal: 'LP4', name: 'LP4', info: 'Blinks with LP3 while the USB bootloader is active (assumed).' },
-  { onModule: true, kind: 'led', color: 'green', d: 3, x: 74, y: 54.2, signal: 'LP3', name: 'LP3', info: 'Blinks with LP4 while the USB bootloader is active (assumed).' },
-  { onModule: true, kind: 'tact', cap: 'black', id: 'boot-mod', input: 'boot', x: 75.3, y: 61.3, size: 6, name: 'BOOT (module)', info: 'USB bootloader entry: hold BOOT while releasing RESET.' },
-  { onModule: true, kind: 'tact', cap: 'black', id: 'reset-mod', input: 'reset', x: 75.3, y: 74, size: 6, name: 'RESET (module)', info: 'MCLR reset. Hold to keep the PIC18F4550 in reset.' },
+  { onModule: true, kind: 'led', color: 'green', d: 3, x: 69, y: 54.2, signal: 'LP4', name: 'LP4', info: 'Lights while RESET is pressed; blinks with LP3 while the USB bootloader is active.' },
+  { onModule: true, kind: 'led', color: 'green', d: 3, x: 74, y: 54.2, signal: 'LP3', name: 'LP3', info: 'Lights while BOOT is pressed; blinks with LP4 while the USB bootloader is active.' },
+  { onModule: true, kind: 'tact', cap: 'silver', id: 'boot-mod', input: 'boot', x: 75.3, y: 61.3, size: 6, name: 'BOOT (module)', info: 'USB bootloader entry: hold BOOT while releasing RESET.' },
+  { onModule: true, kind: 'tact', cap: 'silver', id: 'reset-mod', input: 'reset', x: 75.3, y: 74, size: 6, name: 'RESET (module)', info: 'MCLR reset. Hold to keep the PIC18F4550 in reset.' },
   { onModule: true, kind: 'resistor', x: 79, y: 67.5, rot: 90 },
   { onModule: true, kind: 'resistor', x: 80.5, y: 77, rot: 90 },
-  { onModule: true, kind: 'icsp', x: 13.3, y: 87.5, rot: 90, name: 'PICkit 2/3 ICSP', info: 'In-circuit programming header (not used: this lab programs over USB with the HID bootloader).' },
   { onModule: true, kind: 'zif', x: 46, y: 94.5, rot: 0, name: '40-pin ZIF socket' },
   { onModule: true, kind: 'dip', pins: 40, wide: true, x: 47.5, y: 95, rot: 0, label: 'PIC18F4550-I/P', sub: '1546XYZ', name: 'U2 PIC18F4550', info: 'PIC18F4550 @ 20 MHz crystal (assumed). 32 KB flash, 2 KB RAM.' },
   { onModule: true, kind: 'header', n: 20, female: true, x: 54.3, y: 82, rot: 0, name: 'Pins 40–21' },

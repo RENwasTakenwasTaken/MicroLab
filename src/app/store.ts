@@ -80,7 +80,7 @@ interface LabState {
   editorFont: number;
   /**
    * 3D performance mode: the board's static parts are merged into a few meshes, resistors /
-   * capacitors / diodes are left out, shadows are drawn once instead of every frame and the
+   * capacitors / diodes are left out, shadows are switched off and the
    * scene renders at 1x pixel density.
    */
   perfMode: boolean;

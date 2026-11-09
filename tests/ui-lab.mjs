@@ -40,6 +40,9 @@ await shot('3-nodevice');
 await page.click('.pc-close');
 await page.waitForTimeout(1200);
 
+// power the board: adapter into the wall socket, POWER switch ON
+await page.evaluate(() => { const b = window.__vlab.bench.getState(); b.pick('ac:plug'); window.__vlab.bench.getState().attach('ac:plug', 'ac:wall'); window.__vlab.bench.getState().setPowerSwitch(true); });
+await page.waitForTimeout(600);
 console.log('USB plugged:', await attach('usb:b', 'usb:board'));
 await input({ kind: 'button', id: 'reset', pressed: true });
 await input({ kind: 'button', id: 'boot', pressed: true });

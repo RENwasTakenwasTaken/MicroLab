@@ -30,7 +30,7 @@ ok('motor wires start unplugged', c0.motorLink === 0);
 ok('setup guide open by default', await page.isVisible('.wf') && /Setup guide/.test(await page.textContent('.wf-head')));
 const steps = await page.$$eval('.wf ol > li', (els) => els.map((e) => e.textContent.slice(0, 40)));
 console.log('steps:', steps);
-ok('workflow: motor, DIP, USB, bootloader before code', /motor/i.test(steps[0]) && /DIP/.test(steps[1]) && /USB/.test(steps[2]) && /bootloader/i.test(steps[3]) && /build/i.test(steps[4]));
+ok('workflow: power first, then motor, DIP, USB, bootloader before code', /Power on/i.test(steps[0]) && /motor/i.test(steps[1]) && /DIP/.test(steps[2]) && /USB/.test(steps[3]) && /bootloader/i.test(steps[4]) && /build/i.test(steps[5]));
 await ev(() => window.__vlab.bench.getState().setView('board'));
 await page.waitForTimeout(2500);
 await shot('1-board-start');
@@ -43,6 +43,9 @@ ok('red on pin 1, black on pin 2 -> link +1', (await cfg()).motorLink === 1);
 for (const [bank, i] of [['pb', 0], ['pb', 1], ['dcm', 0], ['dcm', 1], ['dcm', 2], ['periph', 2]]) {
   await ev(([b, k]) => { const lab = window.__vlab.lab.getState(); const c = structuredClone(lab.boardCfg); c.dips[b][k] = true; lab.set({ boardCfg: c }); window.__vlab.sim.input({ kind: 'dip', bank: b, index: k, on: true }); }, [bank, i]);
 }
+// power the board: adapter into the wall socket, POWER switch ON
+await page.evaluate(() => { const b = window.__vlab.bench.getState(); b.pick('ac:plug'); window.__vlab.bench.getState().attach('ac:plug', 'ac:wall'); window.__vlab.bench.getState().setPowerSwitch(true); });
+await page.waitForTimeout(600);
 await attach('usb:b', 'usb:board');
 await input({ kind: 'button', id: 'reset', pressed: true });
 await input({ kind: 'button', id: 'boot', pressed: true });

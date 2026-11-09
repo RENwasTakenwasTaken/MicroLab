@@ -39,7 +39,6 @@ export interface Experiment {
   co: string;
   arch: Arch | 'esp32' | 'stm32';
   mcu: string;
-  toolchain: string;
   status: 'ready' | 'planned';
   objective: string;
   problem: string;
@@ -55,6 +54,8 @@ export interface Experiment {
     probes?: ProbeReq[];
     /** the gear motor's jumper wires on DCM1 */
     motor?: boolean;
+    /** final step: change the LM35 temperature in the Hardware tab while the program runs */
+    tempTask?: boolean;
   };
   starter: string;
   expected: string[];
@@ -62,8 +63,8 @@ export interface Experiment {
   procedure: string[];
 }
 
-const PIC_TOOLCHAIN = 'MPLAB IDE · C18 conventions (built with XC8) · USB HID bootloader';
 const PIC_PROCEDURE = [
+  'Power the board: plug the 12 V adapter\'s 2-pin mains plug into the wall socket in front of the bench, then switch the board\'s POWER slide switch ON (the POWER LED lights).',
   'Set up the hardware listed under Connections: FRC ribbon cables (click a ribbon plug on the desk, then a PORT header and the peripheral connector), jumper wires and probes. Every DIP switch starts OFF: turn ON only the ones the program uses.',
   'Plug the Type-B USB cable into the board.',
   'Enter bootloader mode: hold RESET, press and hold BOOT, release RESET, release BOOT (Shift-click a button to hold it, click it again to release).',
@@ -81,13 +82,12 @@ export const EXPERIMENTS: Experiment[] = [
   {
     id: 'exp1', no: 1, co: 'CO1', arch: 'mcs51', mcu: 'AT89C51', status: 'ready',
     title: 'LED toggling using the 8051 microcontroller',
-    toolchain: 'Keil µVision · C51 (simulated with SDCC + Keil compatibility)',
     objective: 'Develop and implement an embedded program to toggle an LED using an 8051 microcontroller.',
     problem: 'Write an embedded C program for the 8051 that toggles an LED connected to P1.0 with a delay of 500 ms, and observe the port in the simulator.',
     theory: [
       'Port 1 is a quasi-bidirectional port with internal pull-ups; writing 0 drives the pin low.',
       'sbit declares a single addressable bit of a bit-addressable SFR (P1^0 = bit address 0x90).',
-      'Timer 0 mode 1 is a 16-bit up-counter clocked at Fosc/12; TF0 sets on overflow from 0xFFFF.',
+      'Timer 0 mode 1 is a 16-bit up-counter clocked at $F_{osc} / 12$; TF0 sets on overflow from 0xFFFF.',
     ],
     hardware: ['No physical board: Keil µVision simulator workflow', 'AT89C51, 11.0592 MHz crystal', 'Virtual LED bar on Port 1 (LED lit when pin = 1)'],
     connections: [{ signal: 'LED', mcuPin: 'P1.0', board: 'Virtual LED 0 (Port 1 window)', verified: true }],
@@ -105,7 +105,7 @@ export const EXPERIMENTS: Experiment[] = [
     ],
   },
   {
-    id: 'exp2', no: 2, co: 'CO1', arch: 'pic18', mcu: 'PIC18F4550', status: 'ready', toolchain: PIC_TOOLCHAIN,
+    id: 'exp2', no: 2, co: 'CO1', arch: 'pic18', mcu: 'PIC18F4550', status: 'ready',
     title: 'Interfacing push-buttons, LEDs, relay and buzzer',
     objective: 'Design and develop interfacing of push-buttons, LEDs, relay and buzzer with the PIC18F4550.',
     problem: 'When SW0 is pressed, energise the relay and run the LEDs left-to-right; when SW1 is pressed, sound the buzzer and run the LEDs right-to-left; otherwise blink the LEDs alternately.',
@@ -144,13 +144,13 @@ export const EXPERIMENTS: Experiment[] = [
     procedure: PIC_PROCEDURE,
   },
   {
-    id: 'exp3', no: 3, co: 'CO1', arch: 'pic18', mcu: 'PIC18F4550', status: 'ready', toolchain: PIC_TOOLCHAIN,
+    id: 'exp3', no: 3, co: 'CO1', arch: 'pic18', mcu: 'PIC18F4550', status: 'ready',
     title: 'Timer0 interrupt — square wave generation',
     objective: 'Implement the Timer0 interrupt concept using the PIC18F4550 to generate a square wave of any given frequency.',
     problem: 'Generate a 1 kHz square wave on RD0 using the Timer0 overflow interrupt. Verify the frequency on the oscilloscope, then change it to another frequency.',
     theory: [
-      'The USB bootloader runs the CPU at 48 MHz (20 MHz crystal + PLL): Fcy = Fosc / 4 = 12 MHz → one Timer0 count = 83.3 ns (prescaler bypassed).',
-      'Half period for f: N = Fcy / (2f); 1 kHz → N = 6000, reload TMR0 = 65536 − N in the ISR.',
+      'The USB bootloader runs the CPU at 48 MHz (20 MHz crystal + PLL): $F_{cy} = F_{osc} / 4 = 12 MHz$, so one Timer0 count takes $1 / F_{cy} = 83.3 ns$ (prescaler bypassed).',
+      'Counts per half period for a frequency f: $N = F_{cy} / (2f)$. For 1 kHz, $N = 6000$; the ISR reloads $TMR0 = 65536 − N$.',
       'In 16-bit mode TMR0H is buffered: write TMR0H first, then TMR0L.',
       'TMR0IF must be cleared in software inside the ISR.',
     ],
@@ -173,15 +173,15 @@ export const EXPERIMENTS: Experiment[] = [
     procedure: [...PIC_PROCEDURE, 'On the oscilloscope press AUTOSET and read the frequency; the Logic Analyzer tab also measures RD0\'s period and duty cycle.'],
   },
   {
-    id: 'exp4', no: 4, co: 'CO1', arch: 'pic18', mcu: 'PIC18F4550', status: 'ready', toolchain: PIC_TOOLCHAIN,
+    id: 'exp4', no: 4, co: 'CO1', arch: 'pic18', mcu: 'PIC18F4550', status: 'ready',
     title: 'PWM based DC motor speed control (CCP)',
     objective: 'Design and develop a PWM-based motor speed control system using the CCP module in PWM mode.',
     problem: 'Drive the DC motor through the L293D, applying CCP1 PWM at 5 kHz to its EN1 (speed) input. Increase the speed in 10 % steps with SW0 and decrease with SW1.',
     theory: [
-      'PWM period = (PR2 + 1) · 4 · Tosc · TMR2 prescale; at 48 MHz, PR2 = 149 and 1:16 give 200 µs (5 kHz).',
-      'Duty = (CCPR1L:CCP1CON<5:4>) · Tosc · TMR2 prescale (10-bit resolution).',
+      'PWM period: $T_{PWM} = (PR2 + 1) × 4 × T_{osc} × prescale$. At 48 MHz, PR2 = 149 with a 1:16 TMR2 prescale gives $T_{PWM} = 200 µs$ (5 kHz).',
+      'Duty cycle (10-bit): $T_{ON} = (CCPR1L:CCP1CON<5:4>) × T_{osc} × prescale$.',
       'CCP1CON = 0x0C selects PWM mode; RC2 must be configured as an output.',
-      'The motor sees the average voltage: V_avg = duty × V_supply. A DMM on RC2 reads duty × 5 V.',
+      'The motor sees the average voltage $V_{avg} = D × V_{supply}$ (D = duty cycle), so a DMM on RC2 reads $D × 5 V$.',
       'L293D: EN1/EN2 gate each channel pair, so PWM on EN sets the speed while IN1/IN2 set the direction (IN1 = 1, IN2 = 0: forward; equal levels: brake).',
     ],
     hardware: ['EXCEL PIC V1.0 module', 'DC motor section (L293D, DCM1)', '5 V yellow gear motor with slotted wheel on a metal stand (jumper wires to DCM1)', 'RGB LED blue (RC2) as a PWM brightness indicator', 'Push buttons SW0/SW1'],
@@ -214,7 +214,7 @@ export const EXPERIMENTS: Experiment[] = [
     procedure: PIC_PROCEDURE,
   },
   {
-    id: 'exp5', no: 5, co: 'CO1', arch: 'pic18', mcu: 'PIC18F4550', status: 'ready', toolchain: PIC_TOOLCHAIN,
+    id: 'exp5', no: 5, co: 'CO1', arch: 'pic18', mcu: 'PIC18F4550', status: 'ready',
     title: 'Interfacing a 16×2 LCD to display a string',
     objective: 'Design and implement interfacing of a 16x2 LCD module to the PIC18F4550 to display a string.',
     problem: 'Initialise the LCD in 8-bit, 2-line mode and display a string on each line.',
@@ -238,16 +238,24 @@ export const EXPERIMENTS: Experiment[] = [
     procedure: PIC_PROCEDURE,
   },
   {
-    id: 'exp6', no: 6, co: 'CO1', arch: 'pic18', mcu: 'PIC18F4550', status: 'ready', toolchain: PIC_TOOLCHAIN,
+    id: 'exp6', no: 6, co: 'CO1', arch: 'pic18', mcu: 'PIC18F4550', status: 'ready',
     title: 'Temperature sensor with real-time LCD display',
-    objective: 'Interface and program a temperature sensor with the PIC18F4550 to display real-time readings on an LCD.',
-    problem: 'Read the LM35 on AN1 (RA1) with the 10-bit ADC, convert to °C and display it on the LCD every 500 ms.',
+    objective: 'Interface and program a temperature sensor with the PIC18F4550 to display real-time readings on an LCD: understand the working of an A/D converter, study the on-chip ADC of the PIC and interface an analog input to it.',
+    problem: 'Read the LM35 on AN1 (RA1) with the 10-bit on-chip ADC, convert to °C and display it on the LCD every 500 ms. The lab writeup\'s variant reads a 0–5 V input (the trimmer pot on AN2) and shows the result in BCD / voltage form on the LCD.',
     theory: [
-      'LM35 output: 10 mV / °C (0 °C → 0 V).',
-      'With Vref = 5 V: 1 LSB = 5 / 1024 ≈ 4.88 mV ≈ 0.49 °C.',
-      'ADCON0 selects the channel and starts conversion (GO/DONE); ADCON1 = 0x0D makes AN0–AN1 analog (0x0C for AN0–AN2, needed for the pot on AN2); ADCON2 sets justification and TAD.',
+      'An analog-to-digital converter (ADC) turns an analog voltage into a binary number the microcontroller can process. Its main characteristics are resolution (n bits), conversion time and reference voltage $V_{ref}$.',
+      'Step size (the smallest change the ADC can resolve): $Step = V_{ref} / 2^{n}$. With $V_{ref} = 5 V$: 8-bit → 19.53 mV, 10-bit → 4.88 mV, 12-bit → 1.22 mV, 16-bit → 0.076 mV.',
+      'The resolution is fixed by the chip, but $V_{ref}$ sets the input range and step: for a 10-bit ADC, 2.56 V → 2.5 mV and 1.024 V → 1 mV per step.',
+      'Conversion time is how long the ADC takes to convert a sample; acquisition time is how long the sample-and-hold circuit needs to charge to the input voltage before conversion.',
+      'The PIC18F4550 has a 10-bit ADC with 13 inputs, AN0–AN12 (RA0–RA3, RA5, RE0–RE2, RB0–RB4). RA2 and RA3 can also be $V_{ref}−$ and $V_{ref}+$. On this board the LM35 is on AN1 (RA1) and the trimmer pot on AN2 (RA2).',
+      'ADCON0: CHS3:CHS0 select the channel; setting GO/DONE starts a conversion and it reads 0 when the result is ready; ADON switches the module on.',
+      'ADCON1: VCFG1 chooses $V_{ref}−$ (AN2 or $V_{SS}$) and VCFG0 $V_{ref}+$ (AN3 or $V_{DD}$); PCFG3:PCFG0 choose which pins are analog. 0x0D makes AN0–AN1 analog, 0x0C AN0–AN2 (needed for the pot on AN2).',
+      'ADCON2: ADFM = 1 right-justifies the 10-bit result in ADRESH:ADRESL; ACQT2:ACQT0 set the acquisition time in multiples of $T_{AD}$; ADCS2:ADCS0 select the conversion clock.',
+      '$T_{AD}$ (conversion time per bit) must be at least 0.7 µs, and a 10-bit conversion takes $11 T_{AD}$. At $F_{osc} = 48 MHz$, ADCS = 110 ($F_{osc} / 64$) gives $T_{AD} = 64 / 48 MHz = 1.33 µs$, so one conversion takes $11 × 1.33 µs = 14.7 µs$.',
+      'Required acquisition time: $T_{ACQ} = T_{AMP} + T_{C} + T_{COFF} = 0.2 µs + 1.05 µs + 1.2 µs = 2.45 µs$. ACQT = 001 gives $2 T_{AD} = 2.67 µs$; the reference program uses ACQT = 010, $4 T_{AD} = 5.33 µs$. Both exceed 2.45 µs.',
+      'Conversion steps: configure ADCON1, ADCON0 and ADCON2 and turn the module on → wait the acquisition time → set GO/DONE → poll until GO/DONE = 0 (or wait for the ADIF interrupt) → read ADRESH:ADRESL. Wait at least $3 T_{AD}$ before the next acquisition.',
       'The analog pin must also be an input (TRISA bit = 1): an output pin\'s driver overrides the sensor and the ADC then reads 0 V or 5 V.',
-      'T(°C) = ADC × 500 / 1023.',
+      'Input voltage from the result: $V_{in} = ADC × 5 V / 1023$. LM35 output is 10 mV / °C (0 °C → 0 V), so $T(°C) = ADC × 500 / 1023$; one step is $5 V / 1024 ≈ 4.88 mV ≈ 0.49 °C$.',
     ],
     hardware: ['EXCEL PIC V1.0 module', 'LM35 at the analog input section (or the trimmer pot on AN2)', '16×2 LCD'],
     connections: [
@@ -258,6 +266,7 @@ export const EXPERIMENTS: Experiment[] = [
     ],
     board: {
       cables: { LBANK: null, KEY: null, LCD_DATA: 3, LCD_CTRL: 4 },
+      tempTask: true,
       // both inputs are switched on: some batches run the program on the LM35, others on the pot
       switches: [
         { bank: 'analog', index: 0, on: true, label: 'ANALOG INP DIP 1 ON (trimmer pot → RA2 / AN2)' },
@@ -267,10 +276,10 @@ export const EXPERIMENTS: Experiment[] = [
     starter: exp6,
     expected: ['Line 1: "Temperature:"', 'Line 2: current temperature, e.g. "027.3°C"', 'Reading follows the LM35 temperature slider within ±0.5 °C'],
     measurements: [{ kind: 'temperature', label: 'LM35' }, { kind: 'lcd', label: 'LCD contents' }],
-    procedure: PIC_PROCEDURE,
+    procedure: [...PIC_PROCEDURE, 'With the program running, change the LM35 temperature in the Hardware tab and check that the LCD reading follows it.'],
   },
   {
-    id: 'exp7', no: 7, co: 'CO2', arch: 'esp32', mcu: 'ESP32', status: 'planned', toolchain: 'Arduino IDE / ESP-IDF',
+    id: 'exp7', no: 7, co: 'CO2', arch: 'esp32', mcu: 'ESP32', status: 'planned',
     title: 'ESP32 LED blinking and Wi-Fi connectivity',
     objective: 'Develop an ESP32-based LED blinking program and establish Wi-Fi connectivity for IoT applications.',
     problem: 'Blink the on-board LED and connect the ESP32 to a Wi-Fi network (station mode), reporting the IP address.',
@@ -278,7 +287,7 @@ export const EXPERIMENTS: Experiment[] = [
     starter: '', expected: [], measurements: [], procedure: [],
   },
   {
-    id: 'exp8', no: 8, co: 'CO2', arch: 'stm32', mcu: 'STM32', status: 'planned', toolchain: 'STM32CubeIDE',
+    id: 'exp8', no: 8, co: 'CO2', arch: 'stm32', mcu: 'STM32', status: 'planned',
     title: 'STM32 GPIO and timer configuration',
     objective: 'Configure and evaluate STM32 GPIO and timer functionalities to optimize system performance.',
     problem: 'Configure GPIO outputs and a general-purpose timer interrupt on the STM32 and evaluate timing.',

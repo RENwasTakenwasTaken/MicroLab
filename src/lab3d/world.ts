@@ -25,9 +25,22 @@ export const SCOPE = { pos: [470, DESK_Y, -330] as V3, rotY: -0.32, w: 324, h: 1
 export const SIGGEN = { pos: [800, DESK_Y, -210] as V3, rotY: -0.55, w: 290, h: 95, d: 250 };
 export const DMM = { pos: [270, DESK_Y, 150] as V3, rotY: -0.35, tilt: 0.38 };
 
+/**
+ * Modular switchboard on the wall in front of the bench (centre of the plate on the wall surface,
+ * size in mm): the mains switch on the left, the socket on the right.
+ */
+export const WALLBOARD = { pos: [150, DESK_Y + 235, -520] as V3, w: 150, h: 90, d: 9, socketX: 34, switchX: -38 };
+/** The 12 V adapter brick lying on the desk between the wall and the trainer (centre of its base). */
+export const ADAPTER = { pos: [96, DESK_Y, -400] as V3, w: 52, h: 32, d: 90 };
+/** Base board 12 V DC jack mouth (the adapter's barrel plug goes in here, pointing towards -z). */
+export const DC_JACK: V3 = boardToWorld(9 - 7.05, 9.5, 6);
+/** The barrel plug's length and the end of it where the adapter's DC cord leaves. */
+export const BARREL_LEN = 22;
+export const BARREL_BACK: V3 = [DC_JACK[0], DC_JACK[1], DC_JACK[2] - BARREL_LEN];
+
 // ------------------------------------------------------------- sockets
-/** frc: ribbon plug · usb: Type-B · probe: test point for probe jumpers / DMM leads · dcm: motor connector pin */
-export type SocketKind = 'frc' | 'usb' | 'probe' | 'dcm';
+/** frc: ribbon plug · usb: Type-B · probe: test point for probe jumpers / DMM leads · dcm: motor connector pin · ac: mains socket */
+export type SocketKind = 'frc' | 'usb' | 'probe' | 'dcm' | 'ac';
 
 export interface SocketDef {
   id: string;
@@ -42,6 +55,8 @@ export interface SocketDef {
   node?: TestNode;
   /** dcm pins: which motor connector (1 = DCM1, 2 = DCM2) and pin (1 or 2) */
   dcm?: { conn: 1 | 2; pin: 1 | 2 };
+  /** wall-mounted: the plug goes in horizontally, towards -z */
+  wall?: boolean;
 }
 
 export type TestNode = { kind: 'pin'; port: number; bit: number } | { kind: 'gnd' } | { kind: 'vcc' } | { kind: 'gen' };
@@ -85,6 +100,8 @@ function buildSockets(): SocketDef[] {
       out.push({ id: `dcm:${conn}:${pin}`, kind: 'dcm', label: `DCM${conn} pin ${pin}`, pos: boardToWorld(x + (pin === 1 ? -1.27 : 1.27), 3.5, 9), yaw: 0, dcm: { conn, pin } });
     });
   });
+  // wall socket: the adapter's 2-pin plug goes here
+  out.push({ id: 'ac:wall', kind: 'ac', label: 'Wall socket (230 V)', pos: [WALLBOARD.pos[0] + WALLBOARD.socketX, WALLBOARD.pos[1], WALLBOARD.pos[2] + WALLBOARD.d + 0.4], yaw: 0, wall: true });
   // signal generator output clip lying on the desk
   out.push({ id: 'tp:gen', kind: 'probe', label: 'SIG GEN OUT', pos: [SIGGEN.pos[0] - 175, DESK_Y + 6, SIGGEN.pos[2] + 150], yaw: 0, node: { kind: 'gen' } });
   return out;

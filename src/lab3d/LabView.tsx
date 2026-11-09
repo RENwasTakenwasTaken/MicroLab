@@ -13,6 +13,7 @@ import { useFrame, useLab } from '../app/store.ts';
 import { audio } from '../app/audio.ts';
 import { Icon } from '../ui/icons.tsx';
 import { Room } from './Room.tsx';
+import { Mains } from './Mains.tsx';
 import { Computer, screenFrame } from './Computer.tsx';
 import { Instruments } from './Instruments.tsx';
 import { BenchCables, CarryController, SocketTargets, carryPos } from './Cables.tsx';
@@ -275,6 +276,9 @@ function useWorkflow(expId: string) {
   const stale = useLab((s) => s.buildStale);
   const plugs = useBench((s) => s.plugs);
   const usb = plugs['usb:b']?.attachedTo === 'usb:board';
+  const mains = plugs['ac:plug']?.attachedTo === 'ac:wall';
+  const powerSw = useBench((s) => s.powerSwitch);
+  const tempAdjusted = useBench((s) => s.tempAdjusted);
   const up = useBench((s) => s.upload);
   const device = useFrame((s) => s.frame?.device);
   const need = exp?.board ?? {};
@@ -289,6 +293,7 @@ function useWorkflow(expId: string) {
   const flashed = up.phase === 'done' || !!device?.flashed;
   const running = device?.mode === 'running' && !!device.flashed;
   const steps = [
+    { key: 'power', text: 'Power on the board', done: mains && powerSw },
     ...(wiring.length ? [{ key: 'wires', text: 'Connect the ribbon cables', done: wiring.every((w) => w.ok) }] : []),
     ...(need.motor ? [{ key: 'motor', text: 'Connect the motor wires to DCM1', done: motorOk }] : []),
     ...(switches.length ? [{ key: 'dips', text: 'Set the DIP switches', done: switches.every((d) => d.ok) }] : []),
@@ -298,8 +303,9 @@ function useWorkflow(expId: string) {
     { key: 'code', text: 'Write & build the code on the lab computer', done: !!build?.ok && !stale },
     { key: 'upload', text: 'UPLOAD from the computer', done: flashed },
     { key: 'run', text: 'Press RESET to run', done: running },
+    ...(need.tempTask ? [{ key: 'temp', text: 'Change the LM35 temperature in the Hardware tab', done: tempAdjusted }] : []),
   ];
-  return { exp, wiring, motorOk, switches, probes, steps, build, up, device, usb, inBoot, flashed, running, allDone: steps.every((st) => st.done) };
+  return { exp, wiring, motorOk, switches, probes, steps, build, up, device, usb, mains, powerSw, tempAdjusted, inBoot, flashed, running, allDone: steps.every((st) => st.done) };
 }
 
 /**
@@ -336,7 +342,7 @@ const DIP_NAME: Record<string, string> = { pb: 'Push-button DIP', periph: 'PERI_
 
 function WorkflowGuide({ expId, onPc }: { expId: string; onPc: boolean }) {
   const [open, setOpen] = useState(true);
-  const { exp, wiring, motorOk, switches, probes, steps, build, up, device, usb, inBoot, flashed, running, allDone } = useWorkflow(expId);
+  const { exp, wiring, motorOk, switches, probes, steps, build, up, device, usb, mains, powerSw, tempAdjusted, inBoot, flashed, running, allDone } = useWorkflow(expId);
   const power = useFrame((s) => s.frame?.board.power ?? true);
   const seq = device?.bootSeq ?? 'idle';
   const seqN = { idle: 0, reset: 1, 'reset+boot': 2, boot: 3, ready: 4 }[seq];
@@ -357,6 +363,13 @@ function WorkflowGuide({ expId, onPc }: { expId: string; onPc: boolean }) {
         <button className="btn ghost icon" onClick={() => setOpen(false)} title="Hide the setup guide"><Icon name="x" /></button>
       </div>
       <ol>
+        <Step done={done('power')} active={is('power')}>
+          Power on the board <span className="dim">(the switchboard is on the wall in front)</span>
+          <ul className="wf-sub">
+            <li className={mains ? 'ok' : ''}>Adapter&apos;s 2-pin plug → wall socket</li>
+            <li className={powerSw ? 'ok' : ''}>Board POWER switch → ON (the POWER LED lights)</li>
+          </ul>
+        </Step>
         {wiring.length > 0 && (
           <Step done={done('wires')} active={is('wires')}>
             Connect the FRC ribbon cables for this program <span className="dim">(click a ribbon plug on the desk, then a connector)</span>
@@ -405,10 +418,17 @@ function WorkflowGuide({ expId, onPc }: { expId: string; onPc: boolean }) {
           UPLOAD from the computer {up.phase !== 'idle' && up.phase !== 'built' && <span className={`wf-phase ${up.phase}`}>{up.phase === 'nodevice' ? 'no device' : up.phase}{up.phase === 'programming' ? ` ${Math.round(up.progress * 100)}%` : ''}</span>}
         </Step>
         <Step done={running} active={is('run')}>Press RESET (without BOOT) to run the program</Step>
+        {exp?.board?.tempTask && (
+          <Step done={tempAdjusted} active={is('temp')}>
+            With your program running, change the LM35 temperature in the{' '}
+            <a onClick={() => useLab.getState().set({ leftTab: 'hardware', leftOpen: true })}>Hardware tab</a>{' '}
+            <span className="dim">(the LCD reading should follow it)</span>
+          </Step>
+        )}
       </ol>
       {allDone && <div className="wf-done">🎉 All steps complete — the experiment can be performed now.</div>}
       <div className="wf-foot">
-        Board: <b className={power ? '' : 'c-err'}>{!power ? 'power off' : device?.mode === 'running' ? (device.flashed ? 'running your program' : 'running (flash blank)') : device?.mode ?? '—'}</b>
+        Board: <b className={power ? '' : 'c-err'}>{!power ? (mains ? 'power off' : 'no power (adapter unplugged)') : device?.mode === 'running' ? (device.flashed ? 'running your program' : 'running (flash blank)') : device?.mode ?? '—'}</b>
       </div>
     </div>
   );
@@ -502,6 +522,7 @@ const Scene3D = memo(function Scene3D() {
               <StaticBatch><Room /></StaticBatch>
               <BoardScene />
               <StaticBatch><Computer /></StaticBatch>
+              <Mains />
               <Instruments />
               <BenchCables />
               <SocketTargets />
@@ -539,7 +560,7 @@ export function LabView({ expId }: { expId: string }) {
         if (isTyping(document.activeElement)) (document.activeElement as HTMLElement).blur();
       }}>
       <BoardCtx.Provider value={hoverCtx}>
-        <Canvas shadows={!gpu.software} dpr={dpr} camera={CAMERA} gl={gl}>
+        <Canvas shadows={!gpu.software && !perf} dpr={dpr} camera={CAMERA} gl={gl}>
           <Scene3D />
         </Canvas>
       </BoardCtx.Provider>
@@ -555,8 +576,8 @@ export function LabView({ expId }: { expId: string }) {
         <div className="seg">
           <button className={`seg-btn perf-toggle ${perf ? 'on' : ''}`} aria-pressed={perf} onClick={() => useLab.getState().setPerfMode(!perf)}
             title={perf
-              ? 'Performance mode is ON: board parts merged, resistors / capacitors / diodes hidden, shadows drawn once, 1x resolution. Click for full quality.'
-              : 'Performance mode: merge the board parts into fewer draw calls, hide resistors / capacitors / diodes, draw shadows once and render at 1x resolution. For slow computers.'}>
+              ? 'Performance mode is ON: board parts merged, resistors / capacitors / diodes hidden, no shadows, 1x resolution. Click for full quality.'
+              : 'Performance mode: merge the board parts into fewer draw calls, hide resistors / capacitors / diodes, turn shadows off and render at 1x resolution. For slow computers.'}>
             <Icon name="gauge" size={13} /> Performance{perf && <b>ON</b>}
           </button>
         </div>

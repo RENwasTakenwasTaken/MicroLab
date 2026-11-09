@@ -1,5 +1,6 @@
 // Real mouse interaction in the 3D lab (needs `npm run dev`): click the monitor,
-// carry the USB plug to the board, hold RESET/BOOT with Shift-clicks, upload.
+// plug the adapter into the wall socket and switch POWER on, carry the USB plug
+// to the board, hold RESET/BOOT with Shift-clicks, upload.
 import { chromium } from 'playwright-core';
 import { existsSync, mkdirSync } from 'node:fs';
 
@@ -49,6 +50,26 @@ ok('lab computer shows "Device detached"', await page.isVisible('.pc-chip:has-te
 ok('Reset Device disabled outside bootloader mode', await page.isDisabled('.pc-title button:has-text("Reset Device")'));
 await page.click('.pc-close');
 await page.waitForTimeout(1300);
+
+// 1c. power: the board starts unplugged and OFF; plug the adapter in, then the POWER switch
+await setView('lab');
+const power = () => page.evaluate(() => window.__vlab.frame.getState().frame?.board.power);
+ok('board starts without power', (await power()) === false);
+const acRest = await bench(() => window.__vlab.bench.getState().plugs['ac:plug'].rest);
+await clickAt(acRest);
+ok('click on the mains plug picks it up', await bench(() => window.__vlab.bench.getState().carrying === 'ac:plug'));
+const acSock = [184, 228, -510.6]; // wall socket (world.ts WALLBOARD)
+const sa = await proj(acSock);
+await page.mouse.move(sa.x, sa.y, { steps: 10 });
+await page.waitForTimeout(400);
+await page.mouse.click(sa.x, sa.y);
+await page.waitForTimeout(400);
+ok('mains plug goes into the wall socket', await bench(() => window.__vlab.bench.getState().plugs['ac:plug'].attachedTo === 'ac:wall'));
+ok('plugged in but switched OFF: still no power', (await power()) === false);
+await setView('board');
+await clickAt(W(18.5, 11, 7));
+await page.waitForTimeout(800);
+ok('clicking the POWER switch powers the board', (await power()) === true && await bench(() => window.__vlab.bench.getState().powerSwitch));
 
 // 2. carry the USB plug from the desk into the board's Type-B socket
 await setView('lab');

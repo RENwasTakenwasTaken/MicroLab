@@ -1,6 +1,6 @@
 // Physical connections on the bench: FRC ribbons, the USB Type-B cable,
 // oscilloscope probes (crocodile clips on male-to-female jumpers), multimeter
-// leads and the gear motor's jumper wires. Plugs are picked up with a click,
+// leads, the gear motor's jumper wires and the 12 V adapter's 2-pin mains plug. Plugs are picked up with a click,
 // carried with the mouse and dropped onto compatible connectors (or the desk).
 
 import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
@@ -11,7 +11,7 @@ import * as THREE from 'three';
 import { useBench, type Plug } from '../app/bench.ts';
 import { usbCableState } from '../app/upload.ts';
 import { ribbonGeometry, useHover } from '../three/interactive.tsx';
-import { ANCHORS, DESK_Y, MOTOR_PINS, SOCKET, SOCKETS, type SocketDef, type V3 } from './world.ts';
+import { ADAPTER, ANCHORS, DC_JACK, DESK_Y, MOTOR_PINS, SOCKET, SOCKETS, type SocketDef, type V3 } from './world.ts';
 
 /** Live position of the carried plug (updated every frame, read by cables). */
 export const carryPos = new THREE.Vector3(0, 40, 0);
@@ -26,6 +26,9 @@ export function plugPosition(p: Plug, carrying: string | null): THREE.Vector3 {
 const PROBE_LEN = 64; // tip -> back of the probe / lead handle, along local +Y
 const JUMPER_LEN = 14; // female jumper housing: pin -> wire, along local +Y
 const USB_LEN = 40; // metal front -> back of the USB-B moulding, along local -Z
+const AC_LEN = 31; // pin root -> top of the 2-pin mains plug's cord grip, along local +Y
+/** Where the adapter's mains cord leaves the back of the brick (towards the wall). */
+const ADAPTER_AC_OUT: V3 = [ADAPTER.pos[0], DESK_Y + 14, ADAPTER.pos[2] - ADAPTER.d / 2];
 const PROBE_TILT = Math.PI / 2.3;
 
 /**
@@ -37,16 +40,23 @@ function plugEuler(p: Plug, carrying: string | null): THREE.Euler {
   if (p.kind === 'frc') return new THREE.Euler(0, s ? s.yaw : 0.3, 0);
   if (p.kind === 'usb') return new THREE.Euler(0, s ? s.yaw : 0, 0);
   if (p.kind === 'dcm') return new THREE.Euler(s ? 0 : -Math.PI / 2, 0, 0);
+  // mains plug: pins into the socket (horizontally into a wall socket); loose, it lies on its broad face
+  if (p.kind === 'ac') return s ? (s.wall ? new THREE.Euler(Math.PI / 2, 0, 0) : new THREE.Euler(0, s.yaw, 0)) : new THREE.Euler(-Math.PI / 2, 2.6, 0, 'YXZ');
   return new THREE.Euler(s ? 0 : -PROBE_TILT, 0, 0);
 }
 
 /** Where the cable leaves the back of a round-cable plug, and the direction it leaves in. */
 function cableExit(p: Plug, carrying: string | null) {
   const e = plugEuler(p, carrying);
-  const back = p.kind === 'usb' ? new THREE.Vector3(0, 0, -USB_LEN) : new THREE.Vector3(0, p.kind === 'dcm' ? JUMPER_LEN : PROBE_LEN, 0);
+  const back = p.kind === 'usb' ? new THREE.Vector3(0, 0, -USB_LEN) : new THREE.Vector3(0, p.kind === 'dcm' ? JUMPER_LEN : p.kind === 'ac' ? AC_LEN : PROBE_LEN, 0);
   const dir = back.clone().normalize().applyEuler(e);
   dir.y += 0.35;
-  return { at: plugPosition(p, carrying).add(back.applyEuler(e)), dir: dir.normalize() };
+  const at = plugPosition(p, carrying).add(back.applyEuler(e));
+  if (p.kind === 'ac' && p.attachedTo && carrying !== p.id) {
+    // a plugged-in mains plug's cord leaves its back, away from the wall, and falls to the desk
+    return { at, dir: new THREE.Vector3(0, -0.45, 1).normalize() };
+  }
+  return { at, dir: dir.normalize() };
 }
 
 // ---------------------------------------------------------- carry control
@@ -70,7 +80,7 @@ export function CarryController() {
       if (d < bestD) { bestD = d; best = s.id; }
     }
     if (best !== st.snap) useBench.setState({ snap: best });
-    if (best) carryPos.lerp(new THREE.Vector3(...SOCKET[best].pos).add(new THREE.Vector3(0, 14, 0)), 0.5);
+    if (best) carryPos.lerp(new THREE.Vector3(...SOCKET[best].pos).add(SOCKET[best].wall ? new THREE.Vector3(0, 0, 24) : new THREE.Vector3(0, 14, 0)), 0.5);
   });
   return null;
 }
@@ -82,7 +92,7 @@ function SocketTarget({ s, kind }: { s: SocketDef; kind: string }) {
   const hot = hover || snapped;
   const occupied = useBench((st) => Object.values(st.plugs).some((p) => p.attachedTo === s.id));
   const tip = useHover({ name: s.label, info: occupied && kind !== 'probe' ? 'Occupied' : 'Click to connect here' });
-  const r = kind === 'probe' || kind === 'dcm' ? 2.2 : kind === 'usb' ? 9 : 11;
+  const r = kind === 'probe' || kind === 'dcm' ? 2.2 : kind === 'usb' ? 9 : kind === 'ac' ? 13 : 11;
   const color = occupied && kind !== 'probe' ? '#ef5b5b' : hot ? '#7dffb5' : '#3fb68b';
   return (
     <group position={s.pos}>
@@ -118,7 +128,40 @@ const plugMat = {
   blue: new THREE.MeshStandardMaterial({ color: '#2f67c9', roughness: 0.4 }),
   jumperBlk: new THREE.MeshStandardMaterial({ color: '#1b1b1d', roughness: 0.5 }),
   green: new THREE.MeshStandardMaterial({ color: '#2f9e57', roughness: 0.45 }),
+  acBody: new THREE.MeshStandardMaterial({ color: '#202124', roughness: 0.5 }),
+  brass: new THREE.MeshStandardMaterial({ color: '#c9a64e', metalness: 0.9, roughness: 0.3 }),
 };
+
+/** Indian 6 A two-pin mains plug (round pins 19 mm apart), origin at the pin roots, pins along -Y. */
+function MainsPlug() {
+  return (
+    <group>
+      {[-9.5, 9.5].map((x) => (
+        <group key={x}>
+          <mesh position={[x, -9, 0]} material={plugMat.brass}><cylinderGeometry args={[2.4, 2.4, 18, 14]} /></mesh>
+          {/* the pins are split along their length, as on real round pins */}
+          <mesh position={[x, -9.5, 0]}><boxGeometry args={[0.5, 17, 4.9]} /><meshBasicMaterial color="#5a4a20" /></mesh>
+        </group>
+      ))}
+      <mesh position={[0, 1.2, 0]} castShadow material={plugMat.acBody}><boxGeometry args={[36, 2.4, 20]} /></mesh>
+      <mesh position={[0, 12, 0]} castShadow material={plugMat.acBody}><boxGeometry args={[32, 20, 18]} /></mesh>
+      <mesh position={[0, 22, 0]} castShadow material={plugMat.acBody}><cylinderGeometry args={[9, 13, 4, 20]} /></mesh>
+      {/* cord grip */}
+      <mesh position={[0, 27, 0]} material={plugMat.acBody}><cylinderGeometry args={[3.4, 5.2, 8, 12]} /></mesh>
+    </group>
+  );
+}
+
+/** The adapter's barrel plug, fixed in the board's 12 V DC jack (cable towards -z). */
+function BarrelPlug() {
+  return (
+    <group position={DC_JACK}>
+      <mesh position={[0, 0, -2]} rotation={[Math.PI / 2, 0, 0]} material={plugMat.usbMetal}><cylinderGeometry args={[2.75, 2.75, 4, 16]} /></mesh>
+      <mesh position={[0, 0, -10]} rotation={[Math.PI / 2, 0, 0]} castShadow material={plugMat.acBody}><cylinderGeometry args={[4.6, 4.6, 12, 16]} /></mesh>
+      <mesh position={[0, 0, -19]} rotation={[Math.PI / 2, 0, 0]} material={plugMat.acBody}><cylinderGeometry args={[2.2, 3.6, 6, 12]} /></mesh>
+    </group>
+  );
+}
 
 /** Scope probe jumper colours: CH1 yellow, CH2 blue, ground black (matches the probe bands). */
 const PROBE_COLOR: Record<string, THREE.Material> = { ch1: plugMat.yellow, ch2: plugMat.blue, 'scope:gnd': plugMat.blk };
@@ -189,6 +232,8 @@ function PlugMesh({ p }: { p: Plug }) {
     );
   } else if (p.kind === 'dcm') {
     body = <FemaleHousing wire={p.id === 'mot:1' ? plugMat.red : plugMat.blk} />;
+  } else if (p.kind === 'ac') {
+    body = <MainsPlug />;
   } else if (!p.id.startsWith('dmm')) {
     // oscilloscope probe: its crocodile clip holds the male end of a jumper whose female end sits on the pin
     const c = PROBE_COLOR[p.id] ?? plugMat.probe;
@@ -219,13 +264,14 @@ function PlugMesh({ p }: { p: Plug }) {
     <group ref={group} {...hover} onClick={onClick}>
       {body}
       {/* generous invisible grab area */}
-      <mesh visible={false} position={p.kind === 'probe' ? [0, 30, 0] : p.kind === 'dcm' ? [0, 7, 0] : p.kind === 'usb' ? [0, 0, -18] : [0, 0, 0]}>
+      <mesh visible={false} position={p.kind === 'probe' ? [0, 30, 0] : p.kind === 'dcm' ? [0, 7, 0] : p.kind === 'usb' ? [0, 0, -18] : p.kind === 'ac' ? [0, 10, 0] : [0, 0, 0]}>
         {p.kind === 'probe' ? <cylinderGeometry args={[9, 9, 70, 8]} />
           : p.kind === 'dcm' ? <cylinderGeometry args={[4.5, 4.5, 18, 8]} />
           : p.kind === 'usb' ? <sphereGeometry args={[24, 10, 8]} />
+          : p.kind === 'ac' ? <boxGeometry args={[44, 34, 28]} />
           : <boxGeometry args={[21 * 1.5, 9 * 1.5, 8.6 * 1.5]} /> /* 1.5x the FRC plug body */}
       </mesh>
-      {isCarried && <mesh><sphereGeometry args={[p.kind === 'probe' || p.kind === 'dcm' ? 6 : 16, 16, 10]} /><meshBasicMaterial color="#4c9df3" transparent opacity={0.18} depthWrite={false} /></mesh>}
+      {isCarried && <mesh><sphereGeometry args={[p.kind === 'probe' || p.kind === 'dcm' ? 6 : p.kind === 'ac' ? 24 : 16, 16, 10]} /><meshBasicMaterial color="#4c9df3" transparent opacity={0.18} depthWrite={false} /></mesh>}
     </group>
   );
 }
@@ -321,6 +367,8 @@ export function BenchCables() {
     <group>
       {[0, 1, 2, 3].map((i) => <Ribbon key={i} idx={i} />)}
       <RoundCable from={ANCHORS.pcUsb} plugId="usb:b" color="#2b2c30" radius={2.6} />
+      <BarrelPlug />
+      <RoundCable from={ADAPTER_AC_OUT} plugId="ac:plug" color="#1c1c1e" radius={2.4} fixedDir={new THREE.Vector3(0, 0.15, -1).normalize()} slack={0.3} />
       <RoundCable from={ANCHORS.scopeCh1} plugId="ch1" color="#2e3238" radius={1.8} />
       <RoundCable from={ANCHORS.scopeCh2} plugId="ch2" color="#2e3238" radius={1.8} />
       <RoundCable from={ANCHORS.scopeGnd} plugId="scope:gnd" color="#151515" radius={1.2} />

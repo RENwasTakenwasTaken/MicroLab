@@ -7,7 +7,7 @@ import { useLab } from '../app/store.ts';
 import type { PicBoardConfig } from '../sim/board/types.ts';
 import { BASE, FRC_LABEL, FRC_POINTS, MODULE, PARTS, type Part } from './layout.ts';
 import {
-  Box, BoxHeader, CapC, CapE, Crystal, DcJack, Db9, Diode, Dip, Header, Icsp, Jumper, MAT, Qfn, RelayBody,
+  Box, BoxHeader, CapC, CapE, Crystal, DcJack, Db9, Diode, Dip, Header, Jumper, MAT, Qfn, RelayBody,
   Relimate, Resistor, Regulator, Screw, Sip, Socket, Standoff, Terminal, To92, UsbB, Zif,
 } from './parts.tsx';
 import {
@@ -19,7 +19,7 @@ import { StaticBatch } from './perf.tsx';
 /** Parts that never move or change: merged into a few draw calls in performance mode. */
 const STATIC_KINDS = new Set<Part['kind']>([
   'dip', 'socket', 'header', 'boxHeader', 'resistor', 'capE', 'capC', 'crystal', 'dcJack', 'usbB', 'db9', 'relay',
-  'terminal', 'regulator', 'zif', 'to92', 'jumper', 'relimate', 'icsp', 'screw', 'qfn', 'sip', 'diode',
+  'terminal', 'regulator', 'zif', 'to92', 'jumper', 'relimate', 'screw', 'qfn', 'sip', 'diode',
 ]);
 const isStatic = (p: Part) => STATIC_KINDS.has(p.kind) && !(p.kind === 'to92' && p.sensor);
 /** Left out entirely in performance mode. */
@@ -56,7 +56,6 @@ function PartView({ p }: { p: Part }) {
     case 'slide': return <SlideSwitch name={p.name} info={p.info} />;
     case 'jumper': return plain(<Jumper n={p.n} cap={p.cap} />);
     case 'relimate': return plain(<Relimate n={p.n} />);
-    case 'icsp': return plain(<Icsp />);
     case 'screw': return <Screw />;
     case 'qfn': return plain(<Qfn size={p.size} />);
     case 'sip': return plain(<Sip n={p.n} />);

@@ -38,8 +38,16 @@ export function useHover(h: HoverInfo) {
 
 const picBoard = () => (sim.latest?.board.kind === 'pic' ? sim.latest.board : null);
 
+/**
+ * Brushed metal: the RESET buttons' top plate and the POWER switch lever. (The scene has no
+ * environment map, so a fully metallic surface would render almost black.)
+ */
+const CHROME = new THREE.MeshStandardMaterial({ color: '#d4d8dd', metalness: 0.35, roughness: 0.28 });
+/** Dark grey round plunger of a silver-topped tactile switch. */
+const PLUNGER = new THREE.MeshStandardMaterial({ color: '#4a4d52', roughness: 0.45 });
+
 // ------------------------------------------------------------ push button
-export function TactSwitch({ input, size = 6, cap, name, info }: { input?: string; size?: number; cap: 'white' | 'black'; name?: string; info?: string }) {
+export function TactSwitch({ input, size = 6, cap, name, info }: { input?: string; size?: number; cap: 'white' | 'black' | 'silver'; name?: string; info?: string }) {
   const [down, setDown] = useState(false);
   const lock = useOrbitLock();
   const latched = useBench((s) => (input ? !!s.latched[input] : false));
@@ -73,7 +81,16 @@ export function TactSwitch({ input, size = 6, cap, name, info }: { input?: strin
       {[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([a, b], i) => (
         <Box key={i} p={[a * size * 0.42, 0.3, b * size * 0.36]} s={[0.8, 0.6, 1.2]} m={MAT.pin} batch />
       ))}
-      <Cyl p={[0, down || latched ? 4.1 : 4.9, 0]} r={capR} h={2.8} m={cap === 'white' ? MAT.white : MAT.blackGloss} />
+      <Cyl p={[0, down || latched ? 4.1 : 4.9, 0]} r={capR} h={2.8} m={cap === 'white' ? MAT.white : cap === 'silver' ? PLUNGER : MAT.blackGloss} />
+      {/* silver top: the metal cover plate of a real tactile switch, with its four corner rivets */}
+      {cap === 'silver' && (
+        <>
+          <Box p={[0, 3.6, 0]} s={[size * 0.94, 0.3, size * 0.94]} m={CHROME} batch />
+          {[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([a, b], i) => (
+            <Cyl key={`r${i}`} p={[a * size * 0.33, 3.8, b * size * 0.33]} r={size * 0.06} h={0.2} m={MAT.black} batch />
+          ))}
+        </>
+      )}
       {input && <mesh position={[0, 7, 0]} visible={false}><boxGeometry args={[size + 1, 8, size + 1]} /></mesh>}
       {(input === 'reset' || input === 'boot') && (
         <Html center position={[0, 13, 0]} zIndexRange={[16, 0]} style={{ pointerEvents: 'none', display: latched ? 'block' : 'none' }}><div className="held-badge">HELD</div></Html>
@@ -133,7 +150,10 @@ export function Led({ color, d = 3, signal, name, info }: { color: keyof typeof 
     if (signal === 'POWER') return 1;
     if (signal && /^L\d$/.test(signal)) return b.leds[+signal[1]];
     if (signal === 'LP3' || signal === 'LP4') {
-      // USB HID bootloader blinks the module LEDs alternately (assumed indication)
+      // LP4 lights while RESET is held, LP3 while BOOT is held (also when latched with Shift-click)
+      if (signal === 'LP4' && b.inputs.reset) return 1;
+      if (signal === 'LP3' && b.inputs.boot) return 1;
+      // the USB HID bootloader blinks them alternately (assumed indication)
       if (sim.latest?.device.mode !== 'bootloader') return 0;
       return Math.floor(performance.now() / 280) % 2 === (signal === 'LP3' ? 0 : 1) ? 1 : 0;
     }
@@ -285,18 +305,23 @@ export function Trimpot({ input, name, info }: { input?: 'pot' | 'contrast'; nam
 
 // ------------------------------------------------------------ power switch
 export function SlideSwitch({ name, info }: { name?: string; info?: string }) {
-  const knob = useRef<THREE.Mesh>(null);
-  const hover = useHover({ name: name ?? 'Switch', info });
-  useFrame(() => {
-    const on = sim.latest?.board.power ?? true;
-    if (knob.current) knob.current.position.x = on ? -2.2 : 2.2;
+  const on = useBench((s) => s.powerSwitch);
+  const hover = useHover({
+    name: name ?? 'Switch', info,
+    live: () => {
+      const b = useBench.getState();
+      const mains = b.plugs['ac:plug']?.attachedTo === 'ac:wall';
+      return `switch ${b.powerSwitch ? 'ON' : 'OFF'} · mains ${mains ? 'connected' : 'not connected (plug the adapter into the wall socket)'}`;
+    },
   });
   return (
-    <group {...hover} onClick={(e) => { if (busy()) return; e.stopPropagation(); sim.input({ kind: 'power', on: !(sim.latest?.board.power ?? true) }); }}>
+    <group {...hover} onClick={(e) => { if (busy()) return; e.stopPropagation(); const b = useBench.getState(); b.setPowerSwitch(!b.powerSwitch); }}>
       <Box p={[0, 3, 0]} s={[12, 6, 6.5]} m={MAT.black} batch />
-      <mesh ref={knob} position={[-2.2, 7, 0]} castShadow>
-        <boxGeometry args={[3.5, 2.5, 3]} />
-        <primitive object={MAT.blackGloss} attach="material" />
+      <mesh position={[0, 6.05, 0]}><boxGeometry args={[9, 0.1, 2.2]} /><primitive object={MAT.cavity} attach="material" /></mesh>
+      {/* metal lever */}
+      <mesh position={[on ? -2.2 : 2.2, 7.2, 0]} castShadow>
+        <boxGeometry args={[3.2, 2.8, 2.6]} />
+        <primitive object={CHROME} attach="material" />
       </mesh>
     </group>
   );
