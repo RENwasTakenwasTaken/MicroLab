@@ -1,6 +1,6 @@
 /*
  * Experiment 6 : LM35 temperature sensor with real-time display on the LCD
- * Target       : PIC18F4550 @ 48 MHz (Fcy = 12 MHz), MPLAB C18 conventions
+ * Target       : PIC18F4550 @ 48 MHz
  *
  *   LM35 output -> AN1 (RA1)          10 mV / degree C   (PICT board chart)
  *   LCD: data PORTD, RS=RE0, RW=RE1, EN=RE2
@@ -9,72 +9,105 @@
  *   T(C) = ADC * 5000 mV / 1023 / 10 mV  = ADC * 500 / 1023
  * Change the room temperature with the LM35 slider (Hardware tab or click the sensor),
  * and measure RA1 with the DMM.
+ *
+ * delay(): one count = 165 passes of the inner loop, about 125 us at 48 MHz.
  */
 #include <p18f4550.h>
-#include <delays.h>
+#include <stdio.h>		// For sprintf() function.
+#include "vector_relocate.h"
 
-extern void _startup(void);
-#pragma code _RESET_INTERRUPT_VECTOR = 0x1000
-void _reset(void)
-{
-    _asm goto _startup _endasm
-}
-#pragma code
+#define RS PORTEbits.RE0
+#define RW PORTEbits.RE1
+#define EN PORTEbits.RE2
 
-#define LCD_DATA  LATD
-#define RS        LATEbits.LATE0
-#define RW        LATEbits.LATE1
-#define EN        LATEbits.LATE2
+void delay(unsigned int);
 
-void delay_ms(unsigned int ms) { while (ms--) Delay1KTCYx(12); }
-
-void lcd_cmd(unsigned char c)  { RS = 0; RW = 0; LCD_DATA = c; EN = 1; Delay10TCYx(6); EN = 0; delay_ms(2); }
-void lcd_data(unsigned char c) { RS = 1; RW = 0; LCD_DATA = c; EN = 1; Delay10TCYx(6); EN = 0; Delay100TCYx(6); }
-void lcd_string(const rom char *s) { while (*s) lcd_data(*s++); }
-
-void lcd_init(void)
-{
-    delay_ms(20);
-    lcd_cmd(0x38); lcd_cmd(0x0C); lcd_cmd(0x06); lcd_cmd(0x01);
+void lcd_cmd(unsigned char cmd) {
+	PORTD = cmd;
+	RW = 0;
+	RS = 0;
+	EN = 1;
+	delay(1);
+	EN = 0;
+	delay(16);			// ~2 ms: clear display needs 1.52 ms.
 }
 
-unsigned int adc_read(unsigned char channel)
-{
-    ADCON0 = (unsigned char)((channel << 2) | 0x01);   /* select channel, ADC on */
-    Delay10TCYx(24);                                    /* 20 us acquisition */
-    ADCON0bits.GO = 1;                                  /* start conversion */
-    while (ADCON0bits.GO);                              /* wait for completion */
-    return ((unsigned int)ADRESH << 8) | ADRESL;
+void lcd_data(unsigned char dat) {
+	PORTD = dat;
+	RW = 0;
+	RS = 1;
+	EN = 1;
+	delay(1);
+	EN = 0;
+	delay(1);			// ~125 us: a character needs 37 us.
 }
 
-void main(void)
-{
-    unsigned int adc;
-    unsigned long t10;              /* temperature x10 */
+void lcd_send_string(unsigned char *str) {
+	while (*str != '\0') {
+		lcd_data(*str);
+		str++;
+	}
+}
 
-    TRISA = 0x02;                   /* RA1 analog input */
-    TRISD = 0x00;
-    TRISE = 0x00;
-    ADCON1 = 0x0D;                  /* AN0-AN1 analog, others digital, Vref = VDD/VSS */
-    ADCON2 = 0x96;                  /* right justified, 4 TAD, Fosc/64 */
+void lcd_init(void) {
+	delay(160);			// ~20 ms power-on delay.
+	lcd_cmd(0x38);		// 8-bit, 2 lines, 5x7 font.
+	lcd_cmd(0x0C);		// Display ON, cursor OFF.
+	lcd_cmd(0x06);		// Entry mode: increment, no shift.
+	lcd_cmd(0x01);		// Clear display.
+}
 
-    lcd_init();
-    lcd_cmd(0x80);
-    lcd_string("Temperature:");
+void initialize_ADC(void) {
+	// Sequence is 1, 0, 2 as per datasheet.
+	ADCON1 = 0x0D;		// AN0-AN1 analog, rest digital. Vref = VDD / VSS.
+	ADCON0 = 0x05;		// Channel AN1 (LM35), ADC module ON. Conversion starts later.
+	ADCON2 = 0x96;		// Right justified, 4 TAD acquisition, Fosc/64 (TAD = 1.33 us).
 
-    while (1) {
-        adc = adc_read(1);
-        t10 = (unsigned long)adc * 5000UL / 1023UL;     /* in 0.1 degree C */
+	// Wait for the acquisition time before triggering a conversion.
+	delay(1);
+}
 
-        lcd_cmd(0xC0);
-        lcd_data((unsigned char)('0' + (t10 / 1000) % 10));
-        lcd_data((unsigned char)('0' + (t10 / 100) % 10));
-        lcd_data((unsigned char)('0' + (t10 / 10) % 10));
-        lcd_data('.');
-        lcd_data((unsigned char)('0' + t10 % 10));
-        lcd_data(0xDF);                                 /* degree symbol */
-        lcd_string("C   ");
+void main(void) {
+	unsigned int adc_result;
+	unsigned int temperature;			// In 0.1 degree C.
+	unsigned char title[] = "Temperature:";
+	char temperature_text[10];
 
-        delay_ms(500);
-    }
+	TRISA = 0x02;		// RA1 analog input.
+	TRISD = 0x00;
+	TRISE = 0x00;
+
+	RW = 0;
+	RS = 0;
+	EN = 0;
+
+	initialize_ADC();
+	lcd_init();
+
+	lcd_cmd(0x80);
+	lcd_send_string(title);
+
+	while (1) {
+		ADCON0 |= 0x02;					// Set only the GO bit.
+		while ((ADCON0 & 0x02) != 0);	// Wait for the conversion to finish.
+
+		adc_result = ((unsigned int)ADRESH << 8) | ADRESL;
+		temperature = (unsigned int)(((unsigned long)adc_result * 5000UL) / 1023UL);
+
+		sprintf(temperature_text, "%03u.%u", temperature / 10, temperature % 10);
+		lcd_cmd(0xC0);
+		lcd_send_string((unsigned char *)temperature_text);
+		lcd_data(0xDF);					// Degree symbol.
+		lcd_data('C');
+
+		delay(4000);					// ~500 ms.
+	}
+}
+
+void delay(unsigned int time) {
+	unsigned int i, j;
+
+	for (i = 0; i < time; i++) {
+		for (j = 0; j < 165; j++);
+	}
 }

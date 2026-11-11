@@ -3,33 +3,32 @@
  * Target       : AT89C51 @ 11.0592 MHz (Keil C51 dialect)
  * LED          : P1.0  (watch Peripherals > Port 1 or the virtual LED bar)
  *
- * The delay uses Timer 0 in mode 1 so the timing is exact (1 ms per tick):
- *   machine cycle = 12 / 11.0592 MHz = 1.085 us
- *   1 ms          = 921.6 cycles  ->  reload = 65536 - 922 = 0xFC66
+ * delay(): one count of the outer loop (1275 passes of the inner loop) takes
+ * about 9.7 ms in this lab (about 1 ms with Keil C51), so delay(52) is ~500 ms.
  */
 #include <reg51.h>
 
 sbit LED = P1^0;
 
-void delay_ms(unsigned int ms)
-{
-    TMOD = (TMOD & 0xF0) | 0x01;    /* Timer 0, mode 1 (16-bit)          */
-    while (ms--) {
-        TH0 = 0xFC;                 /* load 0xFC66 -> 1 ms                */
-        TL0 = 0x66;
-        TR0 = 1;                    /* start timer                        */
-        while (!TF0);               /* wait for overflow                  */
-        TR0 = 0;                    /* stop timer                         */
-        TF0 = 0;                    /* clear overflow flag                */
-    }
+// Prototype declaration.
+void delay(unsigned int);
+
+void main(void) {
+	LED = 0;
+
+	while (1) {
+		LED = 1;		// LED ON: send high logic on P1.0.
+		delay(52);		// ~500 ms.
+		LED = 0;		// LED OFF: send low logic on P1.0.
+		delay(52);		// ~500 ms.
+	}
 }
 
-void main(void)
-{
-    while (1) {
-        LED = 0;                    /* LED OFF                            */
-        delay_ms(500);
-        LED = 1;                    /* LED ON                             */
-        delay_ms(500);
-    }
+// Prototype definition.
+void delay(unsigned int time) {
+	unsigned int i, j;
+
+	for (i = 0; i < time; i++) {
+		for (j = 0; j < 1275; j++);
+	}
 }

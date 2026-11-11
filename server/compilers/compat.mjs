@@ -98,6 +98,7 @@ export function keilToSdcc(src) {
  *   #pragma interrupt isr        -> (removed) and `void isr(void)` -> `void __interrupt(high_priority) isr(void)`
  *   #pragma interruptlow isr     -> __interrupt(low_priority)
  *   #pragma code xxx = 0x08 ... vector stub with _asm goto isr _endasm -> removed (XC8 places vectors itself)
+ *   an empty vector stub after #pragma code xxx = 0x18 (e.g. an unused low-priority vector) -> removed
  */
 export function c18ToXc8(src) {
   const hi = new Set(), lo = new Set();
@@ -106,10 +107,19 @@ export function c18ToXc8(src) {
   const uses = hi.size || lo.size || /#\s*pragma\s+code\b|_asm\b|\brom\b/.test(src);
   if (!uses) return { source: src, changed: false };
   const lines = src.split('\n');
+  let vectorStub = false; // just after `#pragma code NAME = ADDR`: the next function is a vector stub
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i];
     if (/^\s*#\s*pragma\s+(interrupt|interruptlow)\b/.test(l)) { lines[i] = ''; continue; }
-    if (/^\s*#\s*pragma\s+code\b/.test(l)) { lines[i] = ''; continue; }
+    if (/^\s*#\s*pragma\s+code\b/.test(l)) { vectorStub = /=\s*(0x[0-9a-f]+|\d+)/i.test(l); lines[i] = ''; continue; }
+    // an empty vector stub (e.g. an unused `void low_ISR(void) { }`) would be an uncalled function under XC8
+    if (vectorStub && /^\s*void\s+\w+\s*\(\s*(void)?\s*\)/.test(l)) {
+      vectorStub = false;
+      let e = i;
+      while (e < lines.length - 1 && !/}/.test(lines[e])) e++;
+      const body = lines.slice(i, e + 1).join('\n').replace(/^[^{]*/, '');
+      if (/^\{\s*\}\s*$/.test(body)) { for (let k = i; k <= e; k++) lines[k] = ''; i = e; continue; }
+    }
     // vector stubs: a function whose body is just `_asm goto X _endasm`
     if (/_asm\s+goto\s+\w+\s+_endasm/i.test(l) || /^\s*_asm\b/.test(l)) {
       // blank the enclosing function (scan back to its signature, forward to closing brace)
