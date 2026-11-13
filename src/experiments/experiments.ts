@@ -179,7 +179,7 @@ export const EXPERIMENTS: Experiment[] = [
     id: 'exp4', no: 4, co: 'CO1', arch: 'pic18', mcu: 'PIC18F4550', status: 'ready',
     title: 'PWM based DC motor speed control (CCP)',
     objective: 'Design and develop a PWM-based motor speed control system using the CCP module in PWM mode.',
-    problem: 'Drive the DC motor through the L293D, applying CCP1 PWM at 5 kHz to its EN1 (speed) input. Increase the speed in 10 % steps with SW0 and decrease with SW1.',
+    problem: 'Drive the DC motor through the L293D, applying CCP1 PWM at 5 kHz to its EN1 (speed) input. Step the duty cycle through 20, 40, 60, 80 and 100 % (about 1.5 s each) and repeat, and view the changing duty cycle on RC2 with the oscilloscope.',
     theory: [
       'PWM period: $T_{PWM} = (PR2 + 1) × 4 × T_{osc} × prescale$. At 48 MHz, PR2 = 149 with a 1:16 TMR2 prescale gives $T_{PWM} = 200 µs$ (5 kHz).',
       'Duty cycle (10-bit): $T_{ON} = (CCPR1L:CCP1CON<5:4>) × T_{osc} × prescale$.',
@@ -187,20 +187,24 @@ export const EXPERIMENTS: Experiment[] = [
       'The motor sees the average voltage $V_{avg} = D × V_{supply}$ (D = duty cycle), so a DMM on RC2 reads $D × 5 V$.',
       'L293D: EN1/EN2 gate each channel pair, so PWM on EN sets the speed while IN1/IN2 set the direction (IN1 = 1, IN2 = 0: forward; equal levels: brake).',
     ],
-    hardware: ['EXCEL PIC V1.0 module', 'DC motor section (L293D, DCM1)', '5 V yellow gear motor with slotted wheel on a metal stand (jumper wires to DCM1)', 'RGB LED blue (RC2) as a PWM brightness indicator', 'Push buttons SW0/SW1'],
+    hardware: ['EXCEL PIC V1.0 module', 'DC motor section (L293D, DCM1)', '5 V yellow gear motor with slotted wheel on a metal stand (jumper wires to DCM1)', 'RGB LED blue (RC2) as a PWM brightness indicator', 'Tektronix TDS1002 oscilloscope: crocodile clips on male-to-female jumper wires'],
     connections: [
       { signal: 'L293D EN1 (PWM speed)', mcuPin: 'RC2 / CCP1', board: 'DC motor section (DCM_SW 1 ON)', verified: true },
       { signal: 'L293D IN1 (direction)', mcuPin: 'RD6', board: 'DC motor section (DCM_SW 2 ON)', verified: true },
       { signal: 'L293D IN2 (direction)', mcuPin: 'RD5', board: 'DC motor section (DCM_SW 3 ON)', verified: true },
       { signal: 'L293D EN2 (DCM2, unused)', mcuPin: 'RC1 / CCP2', board: 'DCM_SW 4', verified: true },
-      { signal: 'Speed + / −', mcuPin: 'RB1 / RB0', board: 'SW0 / SW1', verified: true },
       { signal: 'PWM check: blue LED', mcuPin: 'RC2', board: 'PERI_SW 3 ON (buzzer PERI_SW 5 OFF)', verified: true },
       { signal: 'Motor', mcuPin: 'L293D OUT1/OUT2', board: 'Motor jumper wires on DCM1', verified: true },
+      { signal: 'PWM → scope CH1', mcuPin: 'RC2', board: 'Jumper on the PORT-C header pin RC2', verified: true },
+      { signal: 'Scope ground', mcuPin: 'GND', board: 'Jumper on the UART header GND pin', verified: true },
     ],
     board: {
       motor: true,
+      probes: [
+        { plug: 'ch1', pin: 'RC2', label: 'CH1 probe jumper → RC2 (PORT-C header)' },
+        { plug: 'scope:gnd', pin: 'GND', label: 'Probe ground jumper → GND (UART header)' },
+      ],
       switches: [
-        ...PB_ON,
         { bank: 'dcm', index: 0, on: true, label: 'DCM_SW 1 ON (EN1 ← RC2 / CCP1)' },
         { bank: 'dcm', index: 1, on: true, label: 'DCM_SW 2 ON (IN1 ← RD6)' },
         { bank: 'dcm', index: 2, on: true, label: 'DCM_SW 3 ON (IN2 ← RD5)' },
@@ -209,12 +213,12 @@ export const EXPERIMENTS: Experiment[] = [
       ],
     },
     starter: exp4,
-    expected: ['PWM frequency 5 kHz on RC2', 'Start: 50 % duty, motor at half speed, blue LED half bright', 'SW0 → +10 % per step, SW1 → −10 % per step (0 – 100 %): motor speed and LED brightness follow'],
+    expected: ['PWM frequency 5 kHz on RC2 (period 200 µs)', 'Duty cycle steps 20 → 40 → 60 → 80 → 100 %, about 1.5 s each, then repeats', 'On the oscilloscope the pulse width grows while the period stays the same', 'Motor speed and blue LED brightness follow the duty cycle'],
     measurements: [
       { kind: 'pwm', label: 'CCP1 PWM', channel: 0 },
       { kind: 'motor', label: 'DC motor' },
     ],
-    procedure: PIC_PROCEDURE,
+    procedure: [...PIC_PROCEDURE, 'On the oscilloscope press AUTOSET and watch the pulse width on RC2 change every ~1.5 s (20 → 100 % duty) while the motor speeds up.'],
   },
   {
     id: 'exp5', no: 5, co: 'CO1', arch: 'pic18', mcu: 'PIC18F4550', status: 'ready',

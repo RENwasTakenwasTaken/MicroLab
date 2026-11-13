@@ -30,7 +30,8 @@ ok('motor wires start unplugged', c0.motorLink === 0);
 ok('setup guide open by default', await page.isVisible('.wf') && /Setup guide/.test(await page.textContent('.wf-head')));
 const steps = await page.$$eval('.wf ol > li', (els) => els.map((e) => e.textContent.slice(0, 40)));
 console.log('steps:', steps);
-ok('workflow: power first, then motor, DIP, USB, bootloader before code', /Power on/i.test(steps[0]) && /motor/i.test(steps[1]) && /DIP/.test(steps[2]) && /USB/.test(steps[3]) && /bootloader/i.test(steps[4]) && /build/i.test(steps[5]));
+ok('workflow: power, motor, DIP, oscilloscope, USB, bootloader before code', /Power on/i.test(steps[0]) && /motor/i.test(steps[1]) && /DIP/.test(steps[2]) && /oscilloscope/i.test(steps[3]) && /USB/.test(steps[4]) && /bootloader/i.test(steps[5]) && /build/i.test(steps[6]));
+ok('no push-button switches needed', !steps[2].includes('Push-button'));
 await ev(() => window.__vlab.bench.getState().setView('board'));
 await page.waitForTimeout(2500);
 await shot('1-board-start');
@@ -40,12 +41,15 @@ ok('swapped wires -> reversed link', (await cfg()).motorLink === -1);
 await ev(() => { const b = window.__vlab.bench.getState(); b.pick('mot:2'); window.__vlab.bench.getState().drop([150, -2, 0]); });
 await attach('mot:1', 'dcm:1:1'); await attach('mot:2', 'dcm:1:2');
 ok('red on pin 1, black on pin 2 -> link +1', (await cfg()).motorLink === 1);
-for (const [bank, i] of [['pb', 0], ['pb', 1], ['dcm', 0], ['dcm', 1], ['dcm', 2], ['periph', 2]]) {
+for (const [bank, i] of [['dcm', 0], ['dcm', 1], ['dcm', 2], ['periph', 2]]) {
   await ev(([b, k]) => { const lab = window.__vlab.lab.getState(); const c = structuredClone(lab.boardCfg); c.dips[b][k] = true; lab.set({ boardCfg: c }); window.__vlab.sim.input({ kind: 'dip', bank: b, index: k, on: true }); }, [bank, i]);
 }
 // power the board: adapter into the wall socket, POWER switch ON
 await page.evaluate(() => { const b = window.__vlab.bench.getState(); b.pick('ac:plug'); window.__vlab.bench.getState().attach('ac:plug', 'ac:wall'); window.__vlab.bench.getState().setPowerSwitch(true); });
 await page.waitForTimeout(600);
+// the DSO on RC2 (PORT-C header) to watch the duty cycle
+await attach('ch1', 'tp:4:RC2');
+await attach('scope:gnd', 'tp:uart:GND');
 await attach('usb:b', 'usb:board');
 await input({ kind: 'button', id: 'reset', pressed: true });
 await input({ kind: 'button', id: 'boot', pressed: true });
@@ -64,8 +68,11 @@ await input({ kind: 'button', id: 'reset', pressed: true });
 await input({ kind: 'button', id: 'reset', pressed: false });
 await page.waitForTimeout(2500);
 const f = await ev(() => window.__vlab.frame.getState().frame.board);
-ok('motor turns forward', f.motor.rpm > 50, `${f.motor.rpm.toFixed(0)} rpm`);
-ok('blue LED lit by the PWM', f.rgb[2] > 0.3 && f.rgb[0] === 0, JSON.stringify(f.rgb));
+ok('motor turns forward', f.motor.rpm > 30, `${f.motor.rpm.toFixed(0)} rpm`);
+await page.waitForTimeout(3500);
+const f2 = await ev(() => window.__vlab.frame.getState().frame.board);
+ok('duty steps up: motor faster after ~6 s', f2.motor.rpm > f.motor.rpm + 20, `${f.motor.rpm.toFixed(0)} → ${f2.motor.rpm.toFixed(0)} rpm`);
+ok('blue LED lit by the PWM', f.rgb[2] > 0.15 && f.rgb[0] === 0, JSON.stringify(f.rgb));
 ok('workflow complete', await page.isVisible('.wf-done'));
 await ev(() => window.__vlab.bench.getState().setView('board'));
 await page.waitForTimeout(2500);

@@ -98,19 +98,28 @@ const lcdText = (snap) => snap.lcd.rows.map((r) => r.map((c) => (c < 0 ? ' ' : c
   const r = await build('exp4_pic_pwm.c');
   const { board, mcu, runFor, frame, flash } = picRig();
   flash(r.hex);
-  runFor(0.05); frame();
-  runFor(0.2);
-  let f = frame();
+  const now = () => mcu.cycles / mcu.cycleHz();
+  const start = now();
+  // duty measured on RC2 over 0.2 s around a moment `at` seconds after start; the motor model
+  // is stepped every 50 ms so its speed can follow
+  let f;
+  const dutyAt = (at) => {
+    while (now() - start < at - 0.1) { runFor(0.05); f = board.frame(now(), 0.05); }
+    frame(); runFor(0.2); f = frame();
+    return f.motor.dutyEn1;
+  };
   const p = mcu.peripheralState().pwm[0];
-  check('PWM 5 kHz', Math.abs(p.freq - 5000) < 1, `${p.freq.toFixed(0)} Hz`);
-  check('initial duty 50 %', Math.abs(f.motor.dutyEn1 - 0.5) < 0.02, `measured on RC2: ${(f.motor.dutyEn1 * 100).toFixed(1)} %`);
-  board.input({ kind: 'button', id: 'sw0', pressed: true });
-  runFor(0.6);
-  board.input({ kind: 'button', id: 'sw0', pressed: false });
-  runFor(0.3); frame(); runFor(0.2); f = frame();
-  check('SW0 raises duty to 80 %', Math.abs(f.motor.dutyEn1 - 0.8) < 0.02, `${(f.motor.dutyEn1 * 100).toFixed(1)} %`);
-  for (let i = 0; i < 40; i++) { runFor(0.05); f = board.frame(mcu.cycles / mcu.cycleHz(), 0.05); }
-  check('motor speed follows duty', Math.abs(f.motor.rpm - 160) < 6, `${f.motor.rpm.toFixed(0)} rpm`);
+  const steps = [20, 40, 60, 80, 100].map((d, i) => [d, dutyAt(0.75 + i * 1.5)]);
+  check('PWM 5 kHz', Math.abs(mcu.peripheralState().pwm[0].freq - 5000) < 1, `${mcu.peripheralState().pwm[0].freq.toFixed(0)} Hz`);
+  check('duty steps 20/40/60/80/100 % every ~1.5 s', steps.every(([d, m]) => Math.abs(m * 100 - d) < 2), steps.map(([, m]) => `${(m * 100).toFixed(0)} %`).join(' → '));
+  const again = dutyAt(0.75 + 5 * 1.5);
+  check('then repeats from 20 %', Math.abs(again - 0.2) < 0.02, `${(again * 100).toFixed(0)} %`);
+  // motor speed at the end of the 20 % and 80 % windows of the third cycle (starts at 15 s);
+  // a 1.5 s step is shorter than the motor needs to settle fully, so check that it follows
+  const rpmAt = (at) => { while (now() - start < at) { runFor(0.05); f = board.frame(now(), 0.05); } return f.motor.rpm; };
+  const r20 = rpmAt(15 + 1.45), r80 = rpmAt(15 + 4.5 + 1.45);
+  check('motor speed follows duty', r80 > r20 + 60 && r80 > 120 && r80 <= 165, `${r20.toFixed(0)} rpm at 20 % → ${r80.toFixed(0)} rpm at 80 %`);
+  void p;
 }
 
 // ---------------------------------------------------------------- exp 5
