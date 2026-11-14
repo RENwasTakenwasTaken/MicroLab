@@ -1,7 +1,7 @@
 // Procedural canvas textures: PCB silkscreen, IC markings, LED glow and the LCD glass.
 
 import * as THREE from 'three';
-import { BASE, LABELS, MODULE, PARTS, SECTIONS } from './layout.ts';
+import { BASE, MODULE, SECTIONS, labelsFor, partsFor, type BoardVariant } from './layout.ts';
 import { glyphRows } from './font5x7.ts';
 import type { LcdSnapshot } from '../sim/board/hd44780.ts';
 
@@ -17,8 +17,9 @@ function seeded(seed: number) {
   return () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
 }
 
-/** Silkscreen + solder mask for the base board or the PIC module. */
-export function silkscreenTexture(module: boolean): THREE.CanvasTexture {
+/** Silkscreen + solder mask for the base board or the module (PIC or 8051) on it. */
+export function silkscreenTexture(module: boolean, variant: BoardVariant = 'pic18'): THREE.CanvasTexture {
+  const PARTS = partsFor(variant), LABELS = labelsFor(variant);
   const area = module ? MODULE : { x: 0, y: 0, w: BASE.w, h: BASE.h };
   const [c, g] = canvas(Math.round(area.w * PX), Math.round(area.h * PX));
   const tx = (x: number) => (x - area.x) * PX;
@@ -30,7 +31,7 @@ export function silkscreenTexture(module: boolean): THREE.CanvasTexture {
   g.fillStyle = grad;
   g.fillRect(0, 0, c.width, c.height);
   // copper traces under the mask (decorative, deterministic)
-  const rnd = seeded(module ? 7 : 3);
+  const rnd = seeded(module ? (variant === 'mcs51' ? 11 : 7) : 3);
   g.strokeStyle = module ? 'rgba(80,170,100,0.22)' : 'rgba(70,160,95,0.2)';
   g.lineWidth = 0.45 * PX;
   g.lineCap = 'round';

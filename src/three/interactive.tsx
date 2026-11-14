@@ -37,6 +37,7 @@ export function useHover(h: HoverInfo) {
 }
 
 const picBoard = () => (sim.latest?.board.kind === 'pic' ? sim.latest.board : null);
+const mcs51Board = () => (sim.latest?.board.kind === 'mcs51' ? sim.latest.board : null);
 
 /**
  * Brushed metal: the RESET buttons' top plate and the POWER switch lever. (The scene has no
@@ -109,7 +110,7 @@ export function DipSwitch({ n, bank, name, info }: { n: number; bank?: keyof Pic
   const toggle = (i: number) => (e: ThreeEvent<MouseEvent>) => {
     if (busy()) return;
     e.stopPropagation();
-    if (bank) {
+    if (bank && cfg.dips) {
       const next = structuredClone(cfg);
       next.dips[bank][i] = !next.dips[bank][i];
       useLab.getState().set({ boardCfg: next });
@@ -141,9 +142,23 @@ export function Led({ color, d = 3, signal, name, info }: { color: keyof typeof 
   const flash = useRef(0);
   const hover = useHover({
     name: name ?? 'LED', info,
-    live: signal?.startsWith('L') && signal.length === 2 ? () => `brightness ${(level() * 100).toFixed(0)} %` : undefined,
+    live: signal && /^[LM]\d$/.test(signal) ? () => `brightness ${(level() * 100).toFixed(0)} %` : undefined,
   });
+  const serialLed = () => {
+    if (sim.latest?.serial.length) flash.current = 6;
+    return flash.current-- > 0 ? 0.9 : 0;
+  };
   const level = () => {
+    const m = mcs51Board();
+    if (m) {
+      // EXCEL-51 kit: module LEDs L0..L7 on P1 ('M0'..'M7'), base-board LED bank through L_BANK
+      if (!m.power) return 0;
+      if (signal === 'POWER') return 1;
+      if (signal && /^M\d$/.test(signal)) return m.leds[+signal[1]];
+      if (signal && /^L\d$/.test(signal)) return m.bank[+signal[1]];
+      if (signal === 'TXLED' || signal === 'RXLED') return serialLed();
+      return 0;
+    }
     const b = picBoard();
     if (!b) return signal === 'POWER' && sim.latest?.board.power ? 1 : 0;
     if (!b.power) return 0;
@@ -157,10 +172,7 @@ export function Led({ color, d = 3, signal, name, info }: { color: keyof typeof 
       if (sim.latest?.device.mode !== 'bootloader') return 0;
       return Math.floor(performance.now() / 280) % 2 === (signal === 'LP3' ? 0 : 1) ? 1 : 0;
     }
-    if (signal === 'TXLED' || signal === 'RXLED') {
-      if (sim.latest?.serial.length) flash.current = 6;
-      return flash.current-- > 0 ? 0.9 : 0;
-    }
+    if (signal === 'TXLED' || signal === 'RXLED') return serialLed();
     return 0;
   };
   useFrame(() => {

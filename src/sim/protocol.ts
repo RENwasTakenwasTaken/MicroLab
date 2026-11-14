@@ -21,6 +21,8 @@ export type ToWorker =
   | { type: 'erase' }
   | { type: 'flash'; hex: string; debug?: DebugInfo }
   | { type: 'leaveBootloader' }
+  /** 8051 SST EasyIAP: the PC is (not) sending the IAP detect handshake; a RESET then enters IAP mode. */
+  | { type: 'iapSync'; on: boolean }
   | { type: 'unload' }
   | { type: 'run' }
   | { type: 'pause' }

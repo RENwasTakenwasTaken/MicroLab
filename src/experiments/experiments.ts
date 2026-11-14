@@ -60,6 +60,8 @@ export interface Experiment {
     /** final step: change the LM35 temperature in the Hardware tab while the program runs */
     tempTask?: boolean;
   };
+  /** link to a setup video for the practical (shown on the lab sheet and in the setup guide when set) */
+  video?: string;
   starter: string;
   expected: string[];
   measurements: Measurement[];
@@ -76,6 +78,9 @@ const PIC_PROCEDURE = [
   'Measure with the oscilloscope / DMM probes and compare the actual output with the expected output.',
 ];
 
+/** Oscilloscope experiments: what AC coupling on the scope input looks like, and the fix. */
+const SCOPE_COUPLING_TIP = 'If the trace shows spikes that decay back to the centre line instead of a clean 0–5 V square wave, the scope input is on AC coupling: press CH 1 MENU and set Coupling to DC with the top option button.';
+
 const PB_ON: DipReq[] = [
   { bank: 'pb', index: 0, on: true, label: 'Push-button DIP 1 ON (SW0 → RB1)' },
   { bank: 'pb', index: 1, on: true, label: 'Push-button DIP 2 ON (SW1 → RB0)' },
@@ -83,28 +88,47 @@ const PB_ON: DipReq[] = [
 
 export const EXPERIMENTS: Experiment[] = [
   {
-    id: 'exp1', no: 1, co: 'CO1', arch: 'mcs51', mcu: 'AT89C51', status: 'ready',
+    id: 'exp1', no: 1, co: 'CO1', arch: 'mcs51', mcu: 'SST89E516RD2', status: 'ready',
     title: 'LED toggling using the 8051 microcontroller',
     objective: 'Develop and implement an embedded program to toggle an LED using an 8051 microcontroller.',
-    problem: 'Write an embedded C program for the 8051 that toggles an LED connected to P1.0 with a delay of 500 ms, and observe the port in the simulator.',
+    problem: 'Write an embedded C program for the 8051 that toggles the LED on P1.0 with a delay of 500 ms. Build it in Keil \u00b5Vision, download it to the EXCEL-51 kit with SST EasyIAP and observe module LED L0.',
     theory: [
-      'Port 1 is a quasi-bidirectional port with internal pull-ups; writing 0 drives the pin low.',
+      'Port 1 is a quasi-bidirectional port with internal pull-ups; writing 0 drives the pin low. After a reset every port latch is 1 (P1 = 0xFF).',
       'sbit declares a single addressable bit of a bit-addressable SFR (P1^0 = bit address 0x90).',
       'Timer 0 mode 1 is a 16-bit up-counter clocked at $F_{osc} / 12$; TF0 sets on overflow from 0xFFFF.',
+      'The SST89E516RD2 holds IAP boot firmware: right after a reset it listens on the UART for SST EasyIAP. If the PC is calling it (Detect MCU), it stays in IAP mode and accepts a HEX file; otherwise it starts the program in flash.',
+      'Keil writes the Intel HEX file (.\\Objects\\lab.hex) only when Options for Target \u2192 Output \u2192 Create HEX File is ticked.',
     ],
-    hardware: ['No physical board: Keil µVision simulator workflow', 'AT89C51, 11.0592 MHz crystal', 'Virtual LED bar on Port 1 (LED lit when pin = 1)'],
-    connections: [{ signal: 'LED', mcuPin: 'P1.0', board: 'Virtual LED 0 (Port 1 window)', verified: true }],
+    hardware: [
+      'EXCEL-51 v1.0 module (SST89E516RD2, 11.0592 MHz crystal) on the Smart Logic Technologies base board',
+      'Module LEDs L0\u2013L7 on P1.0\u2013P1.7 (lit when the pin is 1)',
+      'Type-B USB cable from the lab PC to the base board\'s USB2UART port (CP2102: COM3)',
+      'Lab computer: Keil \u00b5Vision 5 (C51) and SST EasyIAP',
+    ],
+    connections: [
+      { signal: 'LED L0 (module)', mcuPin: 'P1.0', board: 'Module LEDs L0\u2013L7 = P1.0\u2013P1.7, active high', verified: true },
+      { signal: 'Programming / UART', mcuPin: 'P3.0 RXD, P3.1 TXD', board: 'USB2UART (CP2102) Type-B port, top-left of the base board', verified: true },
+    ],
+    // Setup video for the lab (Keil + SST EasyIAP). The link appears on the lab sheet and in the setup guide once set.
+    video: '', // PASTE THE SETUP VIDEO URL HERE, e.g. 'https://www.youtube.com/watch?v=...'
     starter: exp1,
-    expected: ['P1.0 toggles continuously', 'Each state lasts ≈ 500 ms (period ≈ 1 s, 1 Hz)', 'Port 1 window shows bit 0 changing'],
+    expected: [
+      'Module LED L0 (P1.0) blinks continuously',
+      'Each state lasts \u2248 500 ms (period \u2248 1 s, 1 Hz)',
+      'L1\u2013L7 keep their reset level (lit): the program only changes P1.0',
+    ],
     measurements: [
       { kind: 'pinFreq', label: 'P1.0 toggle frequency', pin: { port: 1, bit: 0 }, expectHz: 1, tolerance: 0.05 },
-      { kind: 'ledbar51', label: 'Port 1 LEDs' },
+      { kind: 'ledbar51', label: 'Module LEDs L7\u2013L0 (P1)' },
     ],
     procedure: [
-      'Write the program in the editor (Keil C51 syntax is accepted).',
-      'Build Target (F7) and check the Build Output for errors.',
-      'Start the debug session (Ctrl+F5), then Run (F5).',
-      'Open Peripherals → Port 1 and watch P1.0 toggle; use Step (F11) to single-step.',
+      'Power the board: plug the 12 V adapter\'s 2-pin mains plug into the wall socket in front of the bench, then switch the board\'s POWER slide switch ON.',
+      'Plug the Type-B USB cable from the lab computer into the USB2UART port (top-left of the base board). The computer gets a COM port: Silicon Labs CP210x (COM3).',
+      'On the lab computer, in Keil \u00b5Vision (project lab, device SST89E516RD2), write the program in main.c (Keil C51 syntax).',
+      'Options for Target \u2192 Output: tick Create HEX File. Build (F7) and check the Build Output: 0 Error(s) and "creating hex file".',
+      'Switch to SST EasyIAP (title bar of the lab computer): target SST89E516RD2 on COM3. Click Detect MCU and press RESET on the board while it waits.',
+      'Click Download: EasyIAP erases, programs and verifies .\\Objects\\lab.hex.',
+      'Press RESET on the board to run the program and watch LED L0 (P1.0): about 500 ms ON, 500 ms OFF.',
     ],
   },
   {
@@ -156,6 +180,7 @@ export const EXPERIMENTS: Experiment[] = [
       'Counts per half period for a frequency f: $N = F_{cy} / (2f)$. For 1 kHz, $N = 6000$; the ISR reloads $TMR0 = 65536 − N$.',
       'In 16-bit mode TMR0H is buffered: write TMR0H first, then TMR0L.',
       'TMR0IF must be cleared in software inside the ISR.',
+      'Scope input coupling: DC shows the true 0–5 V levels. AC puts a capacitor in series (a high-pass of about 10 Hz, $τ ≈ 16 ms$): the trace is centred on 0 V, and a slow square wave (e.g. 10 Hz) turns into spikes that decay back to 0 V. Keep CH1 on DC.',
     ],
     hardware: ['EXCEL PIC V1.0 module (PIC18F4550, 48 MHz via bootloader PLL)', 'Tektronix TDS1002 oscilloscope: crocodile clips on male-to-female jumper wires', 'MECO 801 DMM (optional)'],
     connections: [
@@ -173,7 +198,7 @@ export const EXPERIMENTS: Experiment[] = [
     measurements: [
       { kind: 'pinFreq', label: 'RD0 frequency', pin: { port: 3, bit: 0 }, expectHz: 1000, tolerance: 0.01 },
     ],
-    procedure: [...PIC_PROCEDURE, 'On the oscilloscope press AUTOSET and read the frequency; the Logic Analyzer tab also measures RD0\'s period and duty cycle.'],
+    procedure: [...PIC_PROCEDURE, 'On the oscilloscope press AUTOSET and read the frequency; the Logic Analyzer tab also measures RD0\'s period and duty cycle.', SCOPE_COUPLING_TIP],
   },
   {
     id: 'exp4', no: 4, co: 'CO1', arch: 'pic18', mcu: 'PIC18F4550', status: 'ready',
@@ -218,7 +243,7 @@ export const EXPERIMENTS: Experiment[] = [
       { kind: 'pwm', label: 'CCP1 PWM', channel: 0 },
       { kind: 'motor', label: 'DC motor' },
     ],
-    procedure: [...PIC_PROCEDURE, 'On the oscilloscope press AUTOSET and watch the pulse width on RC2 change every ~1.5 s (20 → 100 % duty) while the motor speeds up.'],
+    procedure: [...PIC_PROCEDURE, 'On the oscilloscope press AUTOSET and watch the pulse width on RC2 change every ~1.5 s (20 → 100 % duty) while the motor speeds up.', SCOPE_COUPLING_TIP],
   },
   {
     id: 'exp5', no: 5, co: 'CO1', arch: 'pic18', mcu: 'PIC18F4550', status: 'ready',

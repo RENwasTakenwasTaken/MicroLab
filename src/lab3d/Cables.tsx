@@ -9,9 +9,13 @@ import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { useBench, type Plug } from '../app/bench.ts';
+import { useLab } from '../app/store.ts';
 import { usbCableState } from '../app/upload.ts';
 import { ribbonGeometry, useHover } from '../three/interactive.tsx';
-import { ADAPTER, ANCHORS, DC_JACK, DESK_Y, MOTOR_PINS, SOCKET, SOCKETS, type SocketDef, type V3 } from './world.ts';
+import { ADAPTER, ANCHORS, DC_JACK, DESK_Y, MOTOR_PINS, SOCKET, socketsFor, type SocketDef, type V3 } from './world.ts';
+
+/** Connectors on the bench with the current experiment's module fitted. */
+const benchSockets = () => socketsFor(useLab.getState().arch === 'mcs51' ? 'mcs51' : 'pic18');
 
 /** Live position of the carried plug (updated every frame, read by cables). */
 export const carryPos = new THREE.Vector3(0, 40, 0);
@@ -72,7 +76,7 @@ export function CarryController() {
     // snap: nearest compatible connector within ~30 px of the cursor
     const kind = st.plugs[st.carrying]?.kind;
     let best: string | null = null, bestD = 30;
-    for (const s of SOCKETS) {
+    for (const s of benchSockets()) {
       if (s.kind !== kind) continue;
       const v = new THREE.Vector3(...s.pos).project(camera);
       if (v.z > 1) continue;
@@ -110,9 +114,10 @@ function SocketTarget({ s, kind }: { s: SocketDef; kind: string }) {
 export function SocketTargets() {
   const carrying = useBench((s) => s.carrying);
   const plugs = useBench((s) => s.plugs);
+  useLab((s) => s.arch); // re-render when the kit changes
   if (!carrying) return null;
   const kind = plugs[carrying]?.kind;
-  return <>{SOCKETS.filter((s) => s.kind === kind).map((s) => <SocketTarget key={s.id} s={s} kind={kind!} />)}</>;
+  return <>{benchSockets().filter((s) => s.kind === kind).map((s) => <SocketTarget key={s.id} s={s} kind={kind!} />)}</>;
 }
 
 // ---------------------------------------------------------------- plugs
@@ -346,14 +351,15 @@ function Ribbon({ idx }: { idx: number }) {
 }
 
 function UsbBadge() {
-  const connected = useBench((s) => s.plugs['usb:b']?.attachedTo === 'usb:board');
+  const socket = useLab((s) => (s.arch === 'mcs51' ? 'usb:uart' : 'usb:board'));
+  const connected = useBench((s) => s.plugs['usb:b']?.attachedTo === socket);
   const phase = useBench((s) => s.upload.phase);
   const progress = useBench((s) => s.upload.progress);
   const st = usbCableState(phase, connected);
   const text = { disconnected: 'USB disconnected', connected: 'USB connected', uploading: `Uploading ${Math.round(progress * 100)}%`, completed: 'Upload complete', error: 'USB communication error' }[st];
-  const pos = SOCKET['usb:board'].pos;
+  const pos = SOCKET[socket].pos;
   return (
-    <Html position={[pos[0], pos[1] + 26, pos[2] - 20]} center zIndexRange={[15, 0]} style={{ pointerEvents: 'none' }}>
+    <Html position={socket === 'usb:uart' ? [pos[0], pos[1] + 30, pos[2] - 26] : [pos[0], pos[1] + 26, pos[2] - 20]} center zIndexRange={[15, 0]} style={{ pointerEvents: 'none' }}>
       <div className={`usb-badge ${st}`}>{text}</div>
     </Html>
   );

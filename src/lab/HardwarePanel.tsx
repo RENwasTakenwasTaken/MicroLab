@@ -184,16 +184,18 @@ function Mcs51Hardware() {
   const cfg = useLab((s) => s.boardCfg) as Mcs51BoardConfig;
   return (
     <div className="section">
-      <h4>8051 target</h4>
+      <h4>EXCEL-51 v1.0 kit</h4>
       <div className="kv">
         <span>Device</span><span>{cfg.variant}</span>
         <span>Crystal</span><span>{(cfg.clockHz / 1e6).toFixed(4)} MHz</span>
         <span>Machine cycle</span><span>{(12e6 / cfg.clockHz).toFixed(3)} µs</span>
-        <span>LED bar</span><span>Port {cfg.ledPort} ({cfg.ledActiveLow ? 'active low' : 'lit when pin = 1'})</span>
+        <span>Module LEDs</span><span>L0–L7 on P{cfg.ledPort}.0–P{cfg.ledPort}.7 ({cfg.ledActiveLow ? 'active low' : 'lit when pin = 1'})</span>
+        <span>Programming</span><span>USB2UART (CP2102, COM3) → SST EasyIAP</span>
       </div>
       <p className="muted" style={{ marginTop: 10, fontSize: 12 }}>
-        Like Keil µVision's simulator there is no physical board: drive input pins from the Port windows in the hardware view
-        (click a pin bit to pull it low, as an external switch would).
+        The 8051 module sits on the same base board as the PIC kit (SST column of the board-connections chart).
+        This version simulates the module LEDs, RESET and the base board&apos;s LED bank through an L_BANK ribbon;
+        the other base-board peripherals are not simulated with the 8051 module yet.
       </p>
     </div>
   );

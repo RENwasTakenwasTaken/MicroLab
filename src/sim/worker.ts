@@ -18,6 +18,7 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
     case 'erase': engine.erase(); break;
     case 'flash': engine.flash(m.hex, m.debug); break;
     case 'leaveBootloader': engine.leaveBootloader(); break;
+    case 'iapSync': engine.setIapSync(m.on); break;
     case 'run': engine.run(); break;
     case 'pause': engine.pause(); break;
     case 'step': engine.step(m.mode); break;

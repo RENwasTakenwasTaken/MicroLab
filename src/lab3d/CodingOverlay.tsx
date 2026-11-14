@@ -8,6 +8,7 @@ import { buildOnly, deviceReady, resetDevice, upload } from '../app/upload.ts';
 import { EDITOR_FONT, useFrame, useLab } from '../app/store.ts';
 import { CodeEditor } from '../ide/Editor.tsx';
 import { Icon } from '../ui/icons.tsx';
+import { Keil51Overlay } from './Keil51.tsx';
 
 export const useScreenRect = create<{ rect: { x: number; y: number; w: number; h: number } | null; set(r: { x: number; y: number; w: number; h: number } | null): void }>((set) => ({
   rect: null,
@@ -28,6 +29,7 @@ export function CodingOverlay({ expId }: { expId: string }) {
   const power = useFrame((s) => s.frame?.board.power ?? true);
   const ready = usb && power && mode === 'bootloader';
   const font = useLab((s) => s.editorFont);
+  const is51 = useLab((s) => s.arch === 'mcs51');
   const logRef = useRef<HTMLDivElement>(null);
   useEffect(() => { logRef.current?.scrollTo(0, logRef.current.scrollHeight); }, [up.log]);
   useEffect(() => {
@@ -36,6 +38,7 @@ export function CodingOverlay({ expId }: { expId: string }) {
     return () => window.removeEventListener('keydown', key);
   }, []);
   if (view !== 'computer' || !rect) return null;
+  if (is51) return <Keil51Overlay expId={expId} rect={rect} />;
   const busy = ['compiling', 'erasing', 'programming', 'verifying'].includes(up.phase);
   const scale = Math.max(0.62, Math.min(1, rect.w / 1000));
   return (

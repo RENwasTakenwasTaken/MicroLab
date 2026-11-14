@@ -39,6 +39,9 @@ export class PinMonitor {
     this.riseN.fill(0);
   }
 
+  /** Forget the rising-edge history (after a reset: periods must not span the restart). */
+  clearEdges() { this.riseN.fill(0); }
+
   update(port: number, level: number, driven: number, t: number) {
     const prevL = this.level[port], prevD = this.driven[port];
     const eff = level & driven;

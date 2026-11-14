@@ -51,8 +51,16 @@ function drawCodeLine(g: CanvasRenderingContext2D, line: string, x: number, y: n
   return false;
 }
 
-export function drawMonitor(s: CanvasScreen, code: string, up: UploadState, device: string, usb: boolean, power: boolean) {
-  const key = JSON.stringify([code.length, code.slice(0, 4000), up.phase, Math.round(up.progress * 20), up.log.length, device, usb, power]);
+/** What the lab computer shows: MPLAB + HID bootloader (PIC kit) or Keil µVision + SST EasyIAP (8051 kit). */
+export interface MonitorIde { title: string; button: string; output: string; taskbar: string; log: string[] }
+const MPLAB: Omit<MonitorIde, 'log'> = {
+  title: 'MPLAB IDE — Lab Project — main.c   [PIC18F4550 · C18]', button: '⬆ UPLOAD',
+  output: 'OUTPUT — USB HID Bootloader', taskbar: 'MPLAB IDE   ·   HID Bootloader',
+};
+
+export function drawMonitor(s: CanvasScreen, code: string, up: UploadState, device: string, usb: boolean, power: boolean, ide?: MonitorIde) {
+  const T = ide ?? { ...MPLAB, log: up.log };
+  const key = JSON.stringify([code.length, code.slice(0, 4000), up.phase, Math.round(up.progress * 20), up.log.length, device, usb, power, ide?.title, ide?.log.length, ide?.log.at(-1)]);
   if (!s.begin(key)) return;
   const g = s.g, W = s.canvas.width, H = s.canvas.height;
   if (!power) { g.fillStyle = '#050607'; g.fillRect(0, 0, W, H); s.end(); return; }
@@ -65,13 +73,13 @@ export function drawMonitor(s: CanvasScreen, code: string, up: UploadState, devi
   g.fillStyle = '#12161c'; g.fillRect(x0, y0, w, h);
   g.fillStyle = '#1d232c'; g.fillRect(x0, y0, w, 34);
   g.font = '600 17px Segoe UI, Arial'; g.fillStyle = '#dbe3ee'; g.textBaseline = 'middle';
-  g.fillText('MPLAB IDE — Lab Project — main.c   [PIC18F4550 · C18]', x0 + 14, y0 + 17);
+  g.fillText(T.title, x0 + 14, y0 + 17);
   g.fillStyle = '#e25555'; g.fillRect(x0 + w - 40, y0 + 6, 30, 22);
   g.fillStyle = '#fff'; g.font = '700 15px Arial'; g.fillText('×', x0 + w - 30, y0 + 17);
   // toolbar
   g.fillStyle = '#171c23'; g.fillRect(x0, y0 + 34, w, 40);
   g.fillStyle = '#2f8f6c'; g.fillRect(x0 + 12, y0 + 41, 120, 26);
-  g.fillStyle = '#fff'; g.font = '700 14px Segoe UI, Arial'; g.fillText('⬆ UPLOAD', x0 + 30, y0 + 54);
+  g.fillStyle = '#fff'; g.font = '700 14px Segoe UI, Arial'; g.fillText(T.button, x0 + 30, y0 + 54);
   g.font = '13px Segoe UI, Arial'; g.fillStyle = usb ? '#3fb68b' : '#8592a5';
   g.fillText(`USB: ${usb ? 'cable connected' : 'not connected'}   ·   Device: ${device}`, x0 + 150, y0 + 54);
   // code
@@ -88,9 +96,9 @@ export function drawMonitor(s: CanvasScreen, code: string, up: UploadState, devi
   // output pane
   const oy = y0 + h - 118;
   g.fillStyle = '#0c0f12'; g.fillRect(x0, oy, w, 118);
-  g.fillStyle = '#8592a5'; g.font = '600 12px Segoe UI, Arial'; g.fillText('OUTPUT — USB HID Bootloader', x0 + 12, oy + 14);
+  g.fillStyle = '#8592a5'; g.font = '600 12px Segoe UI, Arial'; g.fillText(T.output, x0 + 12, oy + 14);
   g.font = '13px Consolas, monospace';
-  up.log.slice(-5).forEach((l, i) => {
+  T.log.slice(-5).forEach((l, i) => {
     g.fillStyle = /error|fail|abort/i.test(l) ? '#ef5b5b' : /complete|successful/i.test(l) ? '#3fb68b' : /→|warning/i.test(l) ? '#e8b04a' : '#b8c2d0';
     g.fillText(l.slice(0, 150), x0 + 12, oy + 36 + i * 17);
   });
@@ -101,7 +109,7 @@ export function drawMonitor(s: CanvasScreen, code: string, up: UploadState, devi
   // taskbar
   g.fillStyle = '#0b0e12'; g.fillRect(0, H - 34, W, 34);
   g.fillStyle = '#4c9df3'; g.fillRect(14, H - 26, 18, 18);
-  g.fillStyle = '#b8c2d0'; g.font = '13px Segoe UI, Arial'; g.fillText('MPLAB IDE   ·   HID Bootloader', 44, H - 17);
+  g.fillStyle = '#b8c2d0'; g.font = '13px Segoe UI, Arial'; g.fillText(T.taskbar, 44, H - 17);
   g.fillText(new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }), W - 60, H - 17);
   s.end();
 }
@@ -115,6 +123,10 @@ export interface ScopeView {
   running: boolean;
   triggered: boolean;
   meas: { pkpk: number; freq: number; period: number; rms: number } | null;
+  /** input coupling per channel (DC / AC / GND) */
+  coupling: [string, string];
+  /** side menu: 0 = AUTOSET, 1 / 2 = CH1 / CH2 MENU */
+  menu: 0 | 1 | 2;
 }
 
 const fmtV = (v: number) => (v >= 1 ? `${v.toFixed(2)}V` : `${(v * 1000).toFixed(0)}mV`);
@@ -170,17 +182,34 @@ export function drawScope(s: CanvasScreen, v: ScopeView, key: string) {
     g.fillText(`Cyc RMS ${fmtV(v.meas.rms)}`, gx + gw / 2, gy + gh - 34);
     g.fillText(`Freq ${v.meas.freq ? (v.meas.freq >= 1000 ? `${(v.meas.freq / 1000).toFixed(3)}kHz` : `${v.meas.freq.toFixed(2)}Hz`) : '?'}`, gx + gw / 2, gy + gh - 16);
   }
-  // footer
-  g.fillText(`CH1 ${fmtV(v.vdiv[0])}`, gx, H - 52);
-  g.fillText(`CH2 ${fmtV(v.vdiv[1])}`, gx + 130, H - 52);
+  // footer: volts/div with the coupling marker (~ = AC, GND = input grounded)
+  const mark = (c: string) => (c === 'AC' ? ' ~' : c === 'GND' ? ' GND' : '');
+  g.fillText(`CH1 ${fmtV(v.vdiv[0])}${mark(v.coupling[0])}`, gx, H - 52);
+  g.fillText(`CH2 ${fmtV(v.vdiv[1])}${mark(v.coupling[1])}`, gx + 130, H - 52);
   g.fillText(`M ${fmtS(v.sdiv)}`, gx + 270, H - 52);
   g.fillText('CH1 ↗ 2.50V', gx + gw - 110, H - 52);
   // side menu
-  const mx = gx + gw + 10;
-  g.strokeStyle = '#555'; g.strokeRect(mx, gy, W - mx - 8, gh);
-  g.font = '700 15px Arial'; g.fillText('AUTOSET', mx + 14, gy + 18);
-  g.font = '14px Arial';
-  ['Multi-cycle', 'Single cycle', 'Rising edge', 'Undo Autoset'].forEach((t, i) => g.fillText(t, mx + 10, gy + 70 + i * 62));
+  const mx = gx + gw + 10, mw = W - mx - 8;
+  g.strokeStyle = '#555'; g.strokeRect(mx, gy, mw, gh);
+  if (v.menu === 0) {
+    g.font = '700 15px Arial'; g.fillText('AUTOSET', mx + 14, gy + 18);
+    g.font = '14px Arial';
+    ['Multi-cycle', 'Single cycle', 'Rising edge', 'Undo Autoset'].forEach((t, i) => g.fillText(t, mx + 10, gy + 70 + i * 62));
+  } else {
+    // channel menu: five boxes, one beside each option button (the top one sets the coupling)
+    const c = v.coupling[v.menu - 1];
+    const items: [string, string][] = [['Coupling', c === 'GND' ? 'Ground' : c], ['BW Limit', 'Off'], ['Volts/Div', 'Coarse'], ['Probe', '1X Voltage'], ['Invert', 'Off']];
+    g.font = '700 15px Arial'; g.fillText(`CH${v.menu}`, mx + mw / 2 - 14, 17);
+    const bh = gh / 5;
+    items.forEach(([title, value], i) => {
+      const y = gy + i * bh;
+      if (i) { g.beginPath(); g.moveTo(mx, y); g.lineTo(mx + mw, y); g.stroke(); }
+      g.font = '700 14px Arial'; g.fillText(title, mx + 8, y + bh * 0.35);
+      if (i === 0) { g.fillStyle = '#111'; g.fillRect(mx + 6, y + bh * 0.52, mw - 12, 22); g.fillStyle = '#f4f5f0'; }
+      g.font = '14px Arial'; g.fillText(value, mx + 10, y + bh * 0.52 + 11);
+      g.fillStyle = '#111';
+    });
+  }
   s.end();
 }
 

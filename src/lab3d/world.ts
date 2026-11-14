@@ -1,7 +1,7 @@
 // World layout of the lab bench (millimetres, y up). The trainer sits at the
 // origin exactly as in the board view; everything else is placed around it.
 
-import { BASE, FRC_LABEL, FRC_POINTS, MODULE } from '../three/layout.ts';
+import { BASE, FRC_LABEL, FRC_POINTS, MODULE, frcPointsFor, type BoardVariant } from '../three/layout.ts';
 
 export type V3 = [number, number, number];
 
@@ -57,6 +57,8 @@ export interface SocketDef {
   dcm?: { conn: 1 | 2; pin: 1 | 2 };
   /** wall-mounted: the plug goes in horizontally, towards -z */
   wall?: boolean;
+  /** only present with this module on the base board (omitted: base board / bench, both kits) */
+  variant?: BoardVariant;
 }
 
 export type TestNode = { kind: 'pin'; port: number; bit: number } | { kind: 'gnd' } | { kind: 'vcc' } | { kind: 'gen' };
@@ -72,24 +74,50 @@ const HEADERS: { x: number; y: number; labels: string[] }[] = [
   { x: 70.5, y: 119.6, labels: ['VCC', 'GND', 'RC0', 'RC1', 'RC2', 'RC3', 'RC4', 'RC5', 'RC6', 'RC7'] },
 ];
 
+/** EXCEL-51 module port headers (P0/P2 printed like PORT-B/D, P1/P3 like PORT-A/C). */
+const P = (n: number) => Array.from({ length: 8 }, (_, b) => `P${n}.${b}`);
+const HEADERS_51: { x: number; y: number; labels: string[] }[] = [
+  { x: 29.7, y: 75.4, labels: [...P(0).reverse(), 'GND', 'VCC'] },
+  { x: 56, y: 75.2, labels: [...P(2).reverse(), 'GND', 'VCC'] },
+  { x: 28.2, y: 118.7, labels: ['VCC', 'GND', ...P(1)] },
+  { x: 56, y: 118.7, labels: ['VCC', 'GND', ...P(3)] },
+];
+
 const UART_HDR = { x: 49.8, y: 150.8 };
 
 function buildSockets(): SocketDef[] {
   const out: SocketDef[] = [];
-  for (const [name, p] of Object.entries(FRC_POINTS)) {
-    const h = (p.module ? MODULE_TOP : 0) + 9;
-    out.push({
-      id: `frc:${name}`, kind: 'frc', label: FRC_LABEL[name] ?? name, pos: boardToWorld(p.x, p.y, h),
-      yaw: -((p.rot * Math.PI) / 180) - Math.PI / 2, frcRole: name.startsWith('PORT') ? 'port' : 'peripheral',
-    });
-  }
-  out.push({ id: 'usb:board', kind: 'usb', label: 'USB-B (PIC)', pos: boardToWorld(7, 130.5, MODULE_TOP + 6), yaw: Math.PI / 2 });
+  const frc = (points: typeof FRC_POINTS, variant?: BoardVariant) => {
+    for (const [name, p] of Object.entries(points)) {
+      if (variant ? !p.module : out.some((s) => s.id === `frc:${name}`)) continue; // base-board connectors once, for both kits
+      const h = (p.module ? MODULE_TOP : 0) + 9;
+      out.push({
+        id: `frc:${name}`, kind: 'frc', label: FRC_LABEL[name] ?? name, pos: boardToWorld(p.x, p.y, h),
+        yaw: -((p.rot * Math.PI) / 180) - Math.PI / 2, frcRole: /^PORT|^P\d$/.test(name) ? 'port' : 'peripheral',
+        variant: p.module ? variant : undefined,
+      });
+    }
+  };
+  frc(Object.fromEntries(Object.entries(FRC_POINTS).filter(([, p]) => !p.module)));
+  frc(FRC_POINTS, 'pic18');
+  frc(frcPointsFor('mcs51'), 'mcs51');
+  out.push({ id: 'usb:board', kind: 'usb', label: 'USB-B (PIC)', pos: boardToWorld(7, 130.5, MODULE_TOP + 6), yaw: Math.PI / 2, variant: 'pic18' });
+  // 8051 kit: the lab PC's Type-B cable goes into the base board's USB2UART port (CP2102), whose mouth faces the board's far edge
+  out.push({ id: 'usb:uart', kind: 'usb', label: 'USB2UART (CP2102) — 8051 programming port', pos: boardToWorld(14.7, 173, 6), yaw: 0, variant: 'mcs51' });
   HEADERS.forEach((hd, hi) => {
     const n = hd.labels.length;
     hd.labels.forEach((lab, k) => {
       const px = hd.x + ((n - 1) / 2 - k) * 2.54;
       const node: TestNode = lab === 'GND' ? { kind: 'gnd' } : lab === 'VCC' ? { kind: 'vcc' } : { kind: 'pin', port: PORT_IDX[lab[1]], bit: +lab[2] };
-      out.push({ id: `tp:${hi}:${lab}`, kind: 'probe', label: lab, pos: boardToWorld(px, hd.y, MODULE_TOP + 9.8), yaw: 0, node });
+      out.push({ id: `tp:${hi}:${lab}`, kind: 'probe', label: lab, pos: boardToWorld(px, hd.y, MODULE_TOP + 9.8), yaw: 0, node, variant: 'pic18' });
+    });
+  });
+  HEADERS_51.forEach((hd, hi) => {
+    const n = hd.labels.length;
+    hd.labels.forEach((lab, k) => {
+      const px = hd.x + ((n - 1) / 2 - k) * 2.54;
+      const node: TestNode = lab === 'GND' ? { kind: 'gnd' } : lab === 'VCC' ? { kind: 'vcc' } : { kind: 'pin', port: +lab[1], bit: +lab[3] };
+      out.push({ id: `tp51:${hi}:${lab}`, kind: 'probe', label: lab, pos: boardToWorld(px, hd.y, MODULE_TOP + 9.8), yaw: 0, node, variant: 'mcs51' });
     });
   });
   // UART header (base board, GND · RXD1 · TXD1 · RXD0 · TXD0 · VCC as printed): its GND pin grounds the scope probes
@@ -107,8 +135,15 @@ function buildSockets(): SocketDef[] {
   return out;
 }
 
+/** Every connector of both kits (look-ups by id); socketsFor() gives the ones on the bench. */
 export const SOCKETS: SocketDef[] = buildSockets();
 export const SOCKET = Object.fromEntries(SOCKETS.map((s) => [s.id, s])) as Record<string, SocketDef>;
+const BY_VARIANT: Record<BoardVariant, SocketDef[]> = {
+  pic18: SOCKETS.filter((s) => !s.variant || s.variant === 'pic18'),
+  mcs51: SOCKETS.filter((s) => !s.variant || s.variant === 'mcs51'),
+};
+/** Connectors present with the given module on the base board. */
+export const socketsFor = (v: BoardVariant) => BY_VARIANT[v];
 
 /** Fixed cable origins (instrument jacks, PC port), world coordinates. */
 export function rotateY(p: V3, yaw: number, origin: V3): V3 {

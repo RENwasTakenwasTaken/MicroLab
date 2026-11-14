@@ -1,7 +1,7 @@
 /*
  * Experiment 1 : Toggle an LED using the 8051 microcontroller
- * Target       : AT89C51 @ 11.0592 MHz (Keil C51 dialect)
- * LED          : P1.0  (watch Peripherals > Port 1 or the virtual LED bar)
+ * Target       : SST89E516RD2 (EXCEL-51 kit) @ 11.0592 MHz (Keil C51 dialect)
+ * LED          : P1.0  (module LED L0)
  *
  * delay(): one count of the outer loop (1275 passes of the inner loop) takes
  * about 9.7 ms in this lab (about 1 ms with Keil C51), so delay(52) is ~500 ms.

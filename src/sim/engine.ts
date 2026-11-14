@@ -29,8 +29,14 @@ export class Engine {
   running = false;
   speed = 1;
   analyzer = false;
-  /** PIC: device is inside the USB HID bootloader (user code not executing). */
+  /**
+   * PIC: device is inside the USB HID bootloader. 8051 (SST89E516RD2): inside its serial IAP
+   * boot firmware (entered when RESET is released while SST EasyIAP is calling it). In both
+   * cases the user code is not executing.
+   */
   bootloader = false;
+  /** 8051: SST EasyIAP is sending its detect handshake over the USB-UART (Detect MCU waiting for RESET). */
+  iapSync = false;
   bootSeq: BootSeq = 'idle';
   private breakpoints = new Set<number>();
   private bpLines: number[] = [];
@@ -76,6 +82,9 @@ export class Engine {
       mcu.clockHz = c.clockHz;
       board.attach(mcu);
       this.mcu = mcu;
+      this.bootloader = false;
+      this.bootSeq = 'idle';
+      this.iapSync = false;
     }
     this.post({ type: 'ready' });
   }
@@ -125,13 +134,14 @@ export class Engine {
     this.setBreakpoints(this.bpLines);
   }
 
-  // --------------------------------------------------- USB bootloader (PIC)
+  // ------------------------- USB bootloader (PIC) / serial IAP boot firmware (SST 8051)
   erase() {
-    if (!this.isPic || !this.bootloader || !this.board.power) {
+    if (!this.bootloader || !this.board.power) {
       this.post({ type: 'bootloader', op: 'erase', ok: false, error: 'Device is not in bootloader mode' });
       return;
     }
-    eraseApplication(this.mcu as Pic18);
+    if (this.isPic) eraseApplication(this.mcu as Pic18);
+    else (this.mcu as Mcs51).code.fill(0xff);
     this.loaded = false;
     this.setDebug(undefined);
     this.post({ type: 'bootloader', op: 'erase', ok: true });
@@ -139,8 +149,23 @@ export class Engine {
   }
 
   flash(hex: string, debug?: DebugInfo) {
-    if (!this.isPic || !this.bootloader || !this.board.power) {
+    if (!this.bootloader || !this.board.power) {
       this.post({ type: 'bootloader', op: 'flash', ok: false, error: 'Device is not in bootloader mode' });
+      return;
+    }
+    if (!this.isPic) {
+      try {
+        const m = this.mcu as Mcs51;
+        const c = m.cycles;
+        const res = m.loadHex(hex);
+        m.cycles = c; // keep the time base: the scope and the pin monitor need monotonic time
+        this.loaded = res.bytes > 0;
+        this.setDebug(debug);
+        this.post({ type: 'bootloader', op: 'flash', ok: true, bytes: res.bytes, warnings: res.warnings });
+      } catch (e) {
+        this.post({ type: 'bootloader', op: 'flash', ok: false, error: (e as Error).message });
+      }
+      this.sendFrame();
       return;
     }
     try {
@@ -156,7 +181,7 @@ export class Engine {
 
   /** Bootloader "Reset Device" command from the PC tool: leave the bootloader and start the application. */
   leaveBootloader() {
-    if (!this.bootloader) return;
+    if (!this.bootloader || !this.isPic) return;
     this.bootloader = false;
     this.bootSeq = 'idle';
     (this.mcu as Pic18).softReset();
@@ -285,15 +310,41 @@ export class Engine {
         if (this.bootloader && this.bootSeq === 'boot') this.bootSeq = 'ready';
       }
     }
+    if (!pic && ev.kind === 'button' && ev.id === 'reset') {
+      if (ev.pressed) { this.goal = null; this.bootSeq = 'reset'; }
+      else if (wasReset) {
+        // SST89E516RD2: after reset the boot firmware listens on the UART; if SST EasyIAP is
+        // calling it (Detect MCU), it stays in IAP mode, otherwise it starts the application
+        if (this.iapSync && this.board.power) {
+          this.bootloader = true;
+          this.running = false;
+          this.bootSeq = 'ready';
+        } else {
+          this.bootloader = false;
+          this.bootSeq = 'idle';
+          this.running = this.board.power && this.loaded;
+          this.lastWall = performance.now();
+        }
+      }
+    }
     if (ev.kind === 'power') {
       this.goal = null;
       if (!ev.on) { this.running = false; this.bootloader = false; this.bootSeq = 'idle'; }
       else if (pic) {
         if (bootHeld()) { this.bootloader = true; this.running = false; }
         else { this.running = true; this.lastWall = performance.now(); }
+      } else {
+        // a power-on reset starts the application in flash (EasyIAP's handshake needs a RESET press)
+        this.running = this.loaded;
+        this.lastWall = performance.now();
       }
     }
     if (!this.running) this.sendFrame();
+  }
+
+  /** 8051: SST EasyIAP starts / stops calling the boot firmware over the UART (Detect MCU). */
+  setIapSync(on: boolean) {
+    this.iapSync = on;
   }
 
   /** Called periodically (~60 Hz). Executes instructions to keep pace with real time. */

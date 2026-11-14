@@ -1,11 +1,12 @@
-// Assembles the EXCEL PIC V1.0 trainer from the parametric layout.
+// Assembles the trainer from the parametric layout: the base board with the EXCEL PIC V1.0
+// module (PIC experiments) or the EXCEL-51 v1.0 module (8051 experiments) on it.
 
 import { useMemo, type ReactNode } from 'react';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { useLab } from '../app/store.ts';
 import type { PicBoardConfig } from '../sim/board/types.ts';
-import { BASE, FRC_LABEL, FRC_POINTS, MODULE, PARTS, type Part } from './layout.ts';
+import { BASE, FRC_LABEL, MODULE, frcPointsFor, partsFor, type BoardVariant, type Part } from './layout.ts';
 import {
   Box, BoxHeader, CapC, CapE, Crystal, DcJack, Db9, Diode, Dip, Header, Jumper, MAT, Qfn, RelayBody,
   Relimate, Resistor, Regulator, Screw, Sip, Socket, Standoff, Terminal, To92, UsbB, Zif,
@@ -24,7 +25,10 @@ const STATIC_KINDS = new Set<Part['kind']>([
 const isStatic = (p: Part) => STATIC_KINDS.has(p.kind) && !(p.kind === 'to92' && p.sensor);
 /** Left out entirely in performance mode. */
 const PASSIVES = new Set<Part['kind']>(['resistor', 'capE', 'capC', 'diode']);
-const INDEXED = PARTS.map((p, i) => ({ p, key: p.id ?? String(i) }));
+const INDEXED: Record<BoardVariant, { p: Part; key: string }[]> = {
+  pic18: partsFor('pic18').map((p, i) => ({ p, key: p.id ?? String(i) })),
+  mcs51: partsFor('mcs51').map((p, i) => ({ p, key: p.id ?? `51-${i}` })),
+};
 
 function PartView({ p }: { p: Part }) {
   const hover = useHover({ name: p.name ?? p.kind, info: p.info });
@@ -63,8 +67,8 @@ function PartView({ p }: { p: Part }) {
   }
 }
 
-function Pcb({ w, h, t, x, y, elevation, module }: { w: number; h: number; t: number; x: number; y: number; elevation: number; module: boolean }) {
-  const tex = useMemo(() => silkscreenTexture(module), [module]);
+function Pcb({ w, h, t, x, y, elevation, module, variant }: { w: number; h: number; t: number; x: number; y: number; elevation: number; module: boolean; variant: BoardVariant }) {
+  const tex = useMemo(() => silkscreenTexture(module, variant), [module, variant]);
   return (
     <group position={[x + w / 2, elevation, y + h / 2]}>
       <mesh position={[0, -t / 2, 0]} receiveShadow castShadow>
@@ -80,16 +84,28 @@ function Pcb({ w, h, t, x, y, elevation, module }: { w: number; h: number; t: nu
 }
 
 const PORT_LABEL = ['PORT-A', 'PORT-B', 'PORT-C', 'PORT-D', 'PORT-E'];
+const PORT_LABEL_51 = ['P0', 'P1', 'P2', 'P3'];
+/** SST column of PICT's board-connections chart (8051 kit), shown with the labels. */
+const EXTRA_51: [string, number, number, number][] = [
+  ['SW0→P0.2  SW1→P0.3', 33, 4, 12],
+  ['RELAY←P2.5', 113.5, 72, 20],
+  ['BUZZER←P1.0', 130.5, 86, 14],
+  ['EN1←P1.0 IN1←P2.4 IN2←P2.3 EN2←P1.1', 94, 16, 10],
+  ['RGB←P3.7/P1.1/P1.0', 107.2, 86, 12],
+  ['USB2UART: TXD→P3.0 RXD←P3.1', 12, 160, 14],
+];
 
-function Labels() {
+function Labels({ variant }: { variant: BoardVariant }) {
   const show = useLab((s) => s.showLabels);
   const cfg = useLab((s) => s.boardCfg) as PicBoardConfig;
   if (!show) return null;
+  const is51 = variant === 'mcs51';
+  const portLabel = is51 ? PORT_LABEL_51 : PORT_LABEL;
   const used = new Map<string, string>();
-  for (const [t, port] of Object.entries(cfg.cables ?? {})) if (port !== null) { used.set(t, PORT_LABEL[port]); used.set(PORT_LABEL[port], FRC_LABEL[t] ?? t); }
+  for (const [t, port] of Object.entries(cfg.cables ?? {})) if (port !== null) { used.set(t, FRC_LABEL[portLabel[port]] ?? portLabel[port]); used.set(portLabel[port], FRC_LABEL[t] ?? t); }
   const a = cfg.assumptions;
   const pin = (r: { port: number; bit: number }) => `R${'ABCDE'[r.port]}${r.bit}`;
-  const extra: [string, number, number, number][] = [
+  const extra: [string, number, number, number][] = is51 || !a ? EXTRA_51 : [
     [`SW0→${pin(a.sw0)}  SW1→${pin(a.sw1)}`, 33, 4, 12],
     [`RELAY←${pin(a.relay)}`, 113.5, 72, 20],
     [`BUZZER←${pin(a.buzzer)}`, 130.5, 86, 14],
@@ -99,7 +115,7 @@ function Labels() {
   ];
   return (
     <>
-      {Object.entries(FRC_POINTS).map(([k, p]) => (
+      {Object.entries(frcPointsFor(variant)).map(([k, p]) => (
         <Html key={k} position={[p.x, (p.module ? MODULE.elevation + MODULE.t : 0) + 13, p.y]} center zIndexRange={[20, 0]} style={{ pointerEvents: 'none' }}>
           <div className={`board-label ${used.has(k) ? 'on' : ''}`}>{FRC_LABEL[k] ?? k}{used.has(k) ? <b> ⇄ {used.get(k)}</b> : null}</div>
         </Html>
@@ -115,12 +131,15 @@ function Labels() {
 
 export function BoardScene() {
   const perf = useLab((s) => s.perfMode);
+  const variant: BoardVariant = useLab((s) => s.arch) === 'mcs51' ? 'mcs51' : 'pic18';
+  const parts = INDEXED[variant];
   const modTop = MODULE.elevation;
   const standoffs: [number, number][] = [[3, 52.5], [79, 52.5], [3, 138.5], [79, 138.5]];
   return (
     // photo coordinates -> world: centre the board and rotate so the photo's left edge faces away
     <group rotation={[0, -Math.PI / 2, 0]}>
-      <group position={[-BASE.w / 2, 0, -BASE.h / 2]}>
+      {/* keyed by the kit: performance mode's merged meshes are rebuilt when the module changes */}
+      <group position={[-BASE.w / 2, 0, -BASE.h / 2]} key={variant}>
         <StaticBatch>
         {/* wooden tray */}
         <mesh position={[BASE.w / 2 + 6, -5.5, BASE.h / 2 - 4]} receiveShadow>
@@ -134,24 +153,24 @@ export function BoardScene() {
           <Cylinder key={i} x={x} y={y} />
         ))}
 
-        <Pcb w={BASE.w} h={BASE.h} t={BASE.t} x={0} y={0} elevation={0} module={false} />
-        <Pcb w={MODULE.w} h={MODULE.h} t={MODULE.t} x={MODULE.x} y={MODULE.y} elevation={modTop + MODULE.t} module />
+        <Pcb w={BASE.w} h={BASE.h} t={BASE.t} x={0} y={0} elevation={0} module={false} variant={variant} />
+        <Pcb w={MODULE.w} h={MODULE.h} t={MODULE.t} x={MODULE.x} y={MODULE.y} elevation={modTop + MODULE.t} module variant={variant} />
         {standoffs.map(([x, y], i) => <group key={i} position={[x, 0, y]}><Standoff h={modTop} /></group>)}
         {/* stacking connectors under the module */}
         <Box p={[40, modTop / 2, 51.5]} s={[50, modTop, 2.6]} m={MAT.black} />
         <Box p={[48, modTop / 2, 140]} s={[52, modTop, 2.6]} m={MAT.black} />
 
-        {INDEXED.filter(({ p }) => isStatic(p) && !(perf && PASSIVES.has(p.kind))).map(({ p, key }) => <Placed key={key} p={p} />)}
+        {parts.filter(({ p }) => isStatic(p) && !(perf && PASSIVES.has(p.kind))).map(({ p, key }) => <Placed key={key} p={p} />)}
         </StaticBatch>
         <StaticBatch tagged>
-          {INDEXED.filter(({ p }) => !isStatic(p)).map(({ p, key }) => <Placed key={key} p={p} />)}
+          {parts.filter(({ p }) => !isStatic(p)).map(({ p, key }) => <Placed key={key} p={p} />)}
           {/* the motor's jumper wires are bench cables (Cables.tsx): the student plugs them onto DCM1 */}
           <DcMotor />
           <TestLamp />
           <Wire points={[[134, 10, 78], [146, 14, 72], [156, 2, 76]]} color="#d63b2e" />
           <Wire points={[[134, 10, 73], [148, 12, 84], [162, 2, 80]]} color="#1f4fbf" />
         </StaticBatch>
-        <Labels />
+        <Labels variant={variant} />
       </group>
     </group>
   );

@@ -259,14 +259,16 @@ function DevProbe() {
 
 // ------------------------------------------------------------ workflow guide
 const PORT_NAMES = ['PORT-A', 'PORT-B', 'PORT-C', 'PORT-D', 'PORT-E'];
+const PORT_NAMES_51 = ['PORT-0', 'PORT-1', 'PORT-2', 'PORT-3'];
 
-/** Does a probe jumper sit on the header pin named like the requirement ('RD0', 'GND')? */
+/** Does a probe jumper sit on the header pin named like the requirement ('RD0', 'P1.0', 'GND')? */
 function probeOn(socketId: string | null | undefined, pin: string | string[]): boolean {
   if (Array.isArray(pin)) return pin.some((p) => probeOn(socketId, p));
   const n = socketId ? SOCKET[socketId]?.node : undefined;
   if (!n) return false;
   if (pin === 'GND') return n.kind === 'gnd';
-  return n.kind === 'pin' && `R${'ABCDE'[n.port]}${n.bit}` === pin;
+  if (n.kind !== 'pin') return false;
+  return (SOCKET[socketId!]?.variant === 'mcs51' ? `P${n.port}.${n.bit}` : `R${'ABCDE'[n.port]}${n.bit}`) === pin;
 }
 
 /** The experiment's workflow, each step read from the real bench, build and device state. */
@@ -276,7 +278,13 @@ function useWorkflow(expId: string) {
   const build = useLab((s) => s.build);
   const stale = useLab((s) => s.buildStale);
   const plugs = useBench((s) => s.plugs);
-  const usb = plugs['usb:b']?.attachedTo === 'usb:board';
+  const is51 = exp?.arch === 'mcs51';
+  const usb = plugs['usb:b']?.attachedTo === (is51 ? 'usb:uart' : 'usb:board');
+  const keil = useBench((s) => s.keil);
+  const iap = useBench((s) => s.iap);
+  const source = useLab((s) => s.sources[expId]);
+  // 8051: the HEX file on disk was built from the program now in the editor
+  const hexFresh = !!keil.hexFile && keil.hexFile.source === (source ?? exp?.starter);
   const mains = plugs['ac:plug']?.attachedTo === 'ac:wall';
   const powerSw = useBench((s) => s.powerSwitch);
   const tempAdjusted = useBench((s) => s.tempAdjusted);
@@ -294,6 +302,20 @@ function useWorkflow(expId: string) {
   const inBoot = device?.mode === 'bootloader';
   const flashed = up.phase === 'done' || !!device?.flashed;
   const running = device?.mode === 'running' && !!device.flashed;
+  const steps51 = [
+    { key: 'usb', text: 'Plug the USB cable into the USB2UART port', done: usb },
+    { key: 'code', text: 'Write & build in Keil (Create HEX File)', done: hexFresh },
+    { key: 'detect', text: 'Detect MCU in SST EasyIAP (press RESET)', done: iap.detected || flashed },
+    { key: 'upload', text: 'Download the HEX file', done: flashed },
+    { key: 'run', text: 'Press RESET to run', done: running },
+  ];
+  const stepsPic = [
+    { key: 'usb', text: 'Plug the USB cable into the board', done: usb },
+    { key: 'boot', text: 'Enter bootloader mode', done: inBoot || flashed },
+    { key: 'code', text: 'Write & build the code on the lab computer', done: !!build?.ok && !stale },
+    { key: 'upload', text: 'UPLOAD from the computer', done: flashed },
+    { key: 'run', text: 'Press RESET to run', done: running },
+  ];
   const steps = [
     { key: 'power', text: 'Power on the board', done: mains && powerSw },
     ...(wiring.length ? [{ key: 'wires', text: 'Connect the ribbon cables', done: wiring.every((w) => w.ok) }] : []),
@@ -301,14 +323,10 @@ function useWorkflow(expId: string) {
     ...(switches.length ? [{ key: 'dips', text: 'Set the DIP switches', done: switches.every((d) => d.ok) }] : []),
     ...(probes.length ? [{ key: 'scope', text: 'Connect the oscilloscope probe', done: probes.every((p) => p.ok) }] : []),
     ...(dmm.length ? [{ key: 'dmm', text: 'Connect the multimeter', done: dmm.every((p) => p.ok) }] : []),
-    { key: 'usb', text: 'Plug the USB cable into the board', done: usb },
-    { key: 'boot', text: 'Enter bootloader mode', done: inBoot || flashed },
-    { key: 'code', text: 'Write & build the code on the lab computer', done: !!build?.ok && !stale },
-    { key: 'upload', text: 'UPLOAD from the computer', done: flashed },
-    { key: 'run', text: 'Press RESET to run', done: running },
+    ...(is51 ? steps51 : stepsPic),
     ...(need.tempTask ? [{ key: 'temp', text: 'Change the LM35 temperature in the Hardware tab', done: tempAdjusted }] : []),
   ];
-  return { exp, wiring, motorOk, switches, probes, dmm, steps, build, up, device, usb, mains, powerSw, tempAdjusted, inBoot, flashed, running, allDone: steps.every((st) => st.done) };
+  return { exp, is51, keil, iap, hexFresh, wiring, motorOk, switches, probes, dmm, steps, build, up, device, usb, mains, powerSw, tempAdjusted, inBoot, flashed, running, allDone: steps.every((st) => st.done) };
 }
 
 /**
@@ -324,7 +342,7 @@ function WorkflowWatcher({ expId }: { expId: string }) {
     prev.current = { id: expId, done, all: allDone, mode: device?.mode };
     if (!p || p.id !== expId) return; // first look at an experiment: no fanfare for its starting state
     const bench = useBench.getState();
-    if (device?.mode === 'bootloader' && p.mode && p.mode !== 'bootloader') {
+    if (device?.mode === 'bootloader' && p.mode && p.mode !== 'bootloader' && getExperiment(expId)?.arch !== 'mcs51') {
       bench.notify(usb ? 'Bootloader mode entered successfully: the computer detects the HID bootloader' : 'Bootloader mode entered successfully: connect the USB cable to upload', 'ok', 5000);
     }
     if (allDone && !p.all) {
@@ -341,11 +359,33 @@ function Step({ done, active, children }: { done: boolean; active?: boolean; chi
   return <li className={done ? 'done' : active ? 'active' : ''}><span className="dot">{done ? '✓' : ''}</span>{children}</li>;
 }
 
+/**
+ * Warns while a scope channel the experiment uses is not on DC coupling: AC centres the trace on
+ * 0 V and turns slow square waves into decaying spikes; Ground shows a flat 0 V line.
+ */
+function CouplingWarning({ channels }: { channels: string[] }) {
+  const coupling = useBench((s) => s.scope.coupling);
+  const off = ([['ch1', 0], ['ch2', 1]] as const).filter(([plug, i]) => channels.includes(plug) && coupling[i] !== 'DC');
+  if (!off.length) return null;
+  return (
+    <>
+      {off.map(([, i]) => (
+        <div key={i} className="wf-warn">
+          {coupling[i] === 'AC'
+            ? `CH${i + 1} is on AC coupling: the trace is centred on 0 V and slow square waves look like decaying spikes.`
+            : `CH${i + 1} is on Ground coupling: its input is disconnected and shows a flat 0 V line.`}
+          {' '}Press CH {i + 1} MENU and set Coupling to DC with the top option button.
+        </div>
+      ))}
+    </>
+  );
+}
+
 const DIP_NAME: Record<string, string> = { pb: 'Push-button DIP', periph: 'PERI_SW', dcm: 'DCM_SW', analog: 'ANALOG INP' };
 
 function WorkflowGuide({ expId, onPc }: { expId: string; onPc: boolean }) {
   const [open, setOpen] = useState(true);
-  const { exp, wiring, motorOk, switches, probes, dmm, steps, build, up, device, usb, mains, powerSw, tempAdjusted, inBoot, flashed, running, allDone } = useWorkflow(expId);
+  const { exp, is51, keil, iap, hexFresh, wiring, motorOk, switches, probes, dmm, steps, build, up, device, usb, mains, powerSw, tempAdjusted, inBoot, flashed, running, allDone } = useWorkflow(expId);
   const power = useFrame((s) => s.frame?.board.power ?? true);
   const seq = device?.bootSeq ?? 'idle';
   const seqN = { idle: 0, reset: 1, 'reset+boot': 2, boot: 3, ready: 4 }[seq];
@@ -390,7 +430,7 @@ function WorkflowGuide({ expId, onPc }: { expId: string; onPc: boolean }) {
           <Step done={done('wires')} active={is('wires')}>
             Connect the FRC ribbon cables for this program <span className="dim">(click a ribbon plug on the desk, then a connector)</span>
             <ul className="wf-sub">
-              {wiring.map((w) => <li key={w.target} className={w.ok ? 'ok' : ''}>{PORT_NAMES[w.port]} → {FRC_LABEL[w.target] ?? w.target}</li>)}
+              {wiring.map((w) => <li key={w.target} className={w.ok ? 'ok' : ''}>{(is51 ? PORT_NAMES_51 : PORT_NAMES)[w.port]} → {FRC_LABEL[w.target] ?? w.target}</li>)}
             </ul>
           </Step>
         )}
@@ -413,6 +453,7 @@ function WorkflowGuide({ expId, onPc }: { expId: string; onPc: boolean }) {
             <ul className="wf-sub">
               {probes.map((p) => <li key={p.plug} className={p.ok ? 'ok' : ''}>{p.label}</li>)}
             </ul>
+            <CouplingWarning channels={probes.map((p) => p.plug)} />
           </Step>
         )}
         {dmm.length > 0 && (
@@ -423,6 +464,29 @@ function WorkflowGuide({ expId, onPc }: { expId: string; onPc: boolean }) {
             </ul>
           </Step>
         )}
+        {is51 ? (
+          <>
+            <Step done={usb} active={is('usb')}>
+              Plug the USB Type-B cable into the <b>USB2UART</b> port, top-left of the base board <span className="dim">(click the plug on the desk, then the socket: the PC gets COM3)</span>
+            </Step>
+            <Step done={done('code')} active={is('code')}>
+              Write &amp; build the program in Keil µVision on the {onPc ? 'lab computer' : <a onClick={() => useBench.getState().setView('computer')}>lab computer</a>}
+              <ul className="wf-sub">
+                <li className={keil.createHex ? 'ok' : ''}>Options → Output → tick Create HEX File</li>
+                <li className={hexFresh ? 'ok' : ''}>Build (F7): 0 Error(s), creating hex file</li>
+              </ul>
+              {keil.phase === 'failed' && <span className="wf-err"> — build errors</span>}
+            </Step>
+            <Step done={done('detect')} active={is('detect')}>
+              In SST EasyIAP (title bar of the lab computer), click Detect MCU, then press <b>RESET</b> on the board when asked
+              {iap.waitUntil && <span className="wf-phase">waiting for RESET</span>}
+            </Step>
+            <Step done={flashed} active={is('upload')}>
+              Download the HEX file {up.phase !== 'idle' && up.phase !== 'built' && <span className={`wf-phase ${up.phase}`}>{up.phase}{up.phase === 'programming' ? ` ${Math.round(up.progress * 100)}%` : ''}</span>}
+            </Step>
+            <Step done={running} active={is('run')}>Press RESET to run the program <span className="dim">(watch the module LEDs on P1)</span></Step>
+          </>
+        ) : (<>
         <Step done={usb} active={is('usb')}>Plug the USB Type-B cable into the board <span className="dim">(click the plug on the desk, then the socket)</span></Step>
         <Step done={inBoot || flashed} active={is('boot')}>
           Enter bootloader mode <span className="dim">(Shift-click = hold a button, click again to release)</span>
@@ -442,6 +506,7 @@ function WorkflowGuide({ expId, onPc }: { expId: string; onPc: boolean }) {
           UPLOAD from the computer {up.phase !== 'idle' && up.phase !== 'built' && <span className={`wf-phase ${up.phase}`}>{up.phase === 'nodevice' ? 'no device' : up.phase}{up.phase === 'programming' ? ` ${Math.round(up.progress * 100)}%` : ''}</span>}
         </Step>
         <Step done={running} active={is('run')}>Press RESET (without BOOT) to run the program</Step>
+        </>)}
         {exp?.board?.tempTask && (
           <Step done={tempAdjusted} active={is('temp')}>
             With your program running, change the LM35 temperature in the{' '}
@@ -450,9 +515,10 @@ function WorkflowGuide({ expId, onPc }: { expId: string; onPc: boolean }) {
           </Step>
         )}
       </ol>
+      {exp?.video && <div className="wf-video"><a href={exp.video} target="_blank" rel="noopener noreferrer">▶ Watch the setup video</a></div>}
       {allDone && <div className="wf-done">🎉 All steps complete — the experiment can be performed now.</div>}
       <div className="wf-foot">
-        Board: <b className={power ? '' : 'c-err'}>{!power ? (mains ? 'power off' : 'no power (adapter unplugged)') : device?.mode === 'running' ? (device.flashed ? 'running your program' : 'running (flash blank)') : device?.mode ?? '—'}</b>
+        Board: <b className={power ? '' : 'c-err'}>{!power ? (mains ? 'power off' : 'no power (adapter unplugged)') : device?.mode === 'running' ? (device.flashed ? 'running your program' : 'running (flash blank)') : is51 && device?.mode === 'bootloader' ? 'IAP boot firmware' : is51 && device?.mode === 'idle' ? 'no program in flash' : device?.mode ?? '—'}</b>
       </div>
     </div>
   );

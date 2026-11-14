@@ -8,7 +8,7 @@ import { sourceFor, useLab } from '../app/store.ts';
 import { useBench, usbConnected } from '../app/bench.ts';
 import { sim } from '../app/sim.ts';
 import { useHover } from '../three/interactive.tsx';
-import { CanvasScreen, drawMonitor } from './screens.ts';
+import { CanvasScreen, drawMonitor, type MonitorIde } from './screens.ts';
 import { COMPUTER, rotateY, type V3 } from './world.ts';
 
 const black = new THREE.MeshStandardMaterial({ color: '#1b1c1f', roughness: 0.45 });
@@ -31,9 +31,21 @@ export function screenFrame() {
 
 function deviceText() {
   const f = sim.latest;
-  if (!f || f.cpu.arch !== 'pic18') return '—';
+  if (!f) return '—';
+  if (f.cpu.arch === 'mcs51') {
+    if (!usbConnected()) return 'no COM port';
+    return useBench.getState().iap.detected ? 'COM3 · SST89E516RD2 detected' : 'COM3 (CP210x) · target not detected';
+  }
   if (!usbConnected()) return 'not detected';
   return f.device.mode === 'bootloader' ? 'PIC18F4550 HID Bootloader (attached)' : 'not in bootloader mode';
+}
+
+/** Keil µVision / SST EasyIAP on the screen of the 8051 kit's lab computer. */
+function keilIde(): MonitorIde {
+  const { keil, iap } = useBench.getState();
+  return keil.app === 'iap'
+    ? { title: 'SST EasyIAP — .\\Objects\\lab.hex → SST89E516RD2', button: 'Download', output: 'SST EasyIAP', taskbar: 'µVision   ·   SST EasyIAP', log: iap.log }
+    : { title: 'lab - µVision  —  main.c   [SST89E516RD2 · 11.0592 MHz]', button: 'Build (F7)', output: 'Build Output', taskbar: 'µVision   ·   SST EasyIAP', log: keil.log };
 }
 
 function keyboardTexture() {
@@ -56,15 +68,16 @@ export function Computer() {
   const route = useLab((s) => s.route);
   const view = useBench((s) => s.view);
   const last = useRef(0);
-  const hover = useHover({ name: 'Lab computer (Dell monitor)', info: 'Click the screen to open MPLAB and write / upload your program.' });
-  const towerHover = useHover({ name: 'PC tower', info: 'Front USB port: Type-B USB cable to the PIC board (USB HID bootloader).' });
+  const is51 = useLab((s) => s.arch === 'mcs51');
+  const hover = useHover({ name: 'Lab computer (Dell monitor)', info: is51 ? 'Click the screen to open Keil µVision (write and build) and SST EasyIAP (download to the 8051 kit).' : 'Click the screen to open MPLAB and write / upload your program.' });
+  const towerHover = useHover({ name: 'PC tower', info: is51 ? 'Front USB port: Type-B USB cable to the base board\'s USB2UART port (CP2102: COM3).' : 'Front USB port: Type-B USB cable to the PIC board (USB HID bootloader).' });
 
   useFrame(() => {
     const now = performance.now();
     if (now - last.current < 200) return;
     last.current = now;
     const id = route.page === 'exp' ? route.id : '';
-    drawMonitor(screen, sourceFor(id), useBench.getState().upload, deviceText(), usbConnected(), true);
+    drawMonitor(screen, sourceFor(id), useBench.getState().upload, deviceText(), usbConnected(), true, useLab.getState().arch === 'mcs51' ? keilIde() : undefined);
   });
 
   const open = (e: { stopPropagation(): void }) => {

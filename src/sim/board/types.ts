@@ -68,11 +68,18 @@ export interface PicBoardConfig {
   motorLink?: number;
 }
 
+export type Mcs51Variant = 'AT89C51' | 'AT89S52' | 'SST89E516RD2';
+
 export interface Mcs51BoardConfig {
   clockHz: number;
-  variant: 'AT89C51' | 'AT89S52';
+  variant: Mcs51Variant;
   ledPort: number;
   ledActiveLow: boolean;
+  /**
+   * EXCEL-51 kit on the trainer's base board: FRC ribbons from the module's PORT-0..3 headers
+   * (port index 0..3) to base-board connectors. Only the LED bank is modelled for the 8051.
+   */
+  cables?: Record<FrcTarget, number | null>;
 }
 
 export type BoardInput =
@@ -110,7 +117,11 @@ export interface PicBoardSnapshot {
 export interface Mcs51BoardSnapshot {
   kind: 'mcs51';
   power: boolean;
+  resetHeld: boolean;
+  /** module LEDs L0..L7 on the LED port (brightness 0..1) */
   leds: number[];
+  /** base-board LED bank L0..L7 through an L_BANK ribbon (0 when no ribbon) */
+  bank: number[];
   extLow: number[];
   ledPort: number;
   ledActiveLow: boolean;

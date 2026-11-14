@@ -1,20 +1,16 @@
-// Experiment workspace: the simulation (3D lab / editor + target) fills the stage;
+// Experiment workspace: the 3D lab (PIC or 8051 kit on the bench) fills the stage;
 // the lab sheet (left), debugger (right) and output (bottom) float above it as
 // hideable glass panes.
 
 import { lazy, Suspense, useEffect, useState, type ReactNode, type PointerEvent } from 'react';
-import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { useLab, type LeftTab } from './store.ts';
 import { useBench } from './bench.ts';
 import { openExperiment, sim } from './sim.ts';
-import { getExperiment } from '../experiments/experiments.ts';
 import { TopBar } from '../ide/TopBar.tsx';
-import { CodeEditor } from '../ide/Editor.tsx';
 import { BottomPanel } from '../ide/BottomPanel.tsx';
 import { DebugPanel } from '../debug/DebugPanel.tsx';
 import { ExperimentPanel } from '../lab/ExperimentPanel.tsx';
 import { HardwarePanel } from '../lab/HardwarePanel.tsx';
-import { VirtualTarget51 } from '../lab/VirtualTarget51.tsx';
 import { Icon } from '../ui/icons.tsx';
 
 const LabView = lazy(() => import('../lab3d/LabView.tsx').then((m) => ({ default: m.LabView })));
@@ -30,8 +26,6 @@ function useNarrow() {
 }
 
 function Hardware({ expId }: { expId: string }) {
-  const exp = getExperiment(expId)!;
-  if (exp.arch === 'mcs51') return <VirtualTarget51 />;
   return (
     <Suspense fallback={<div className="empty"><span className="spinner" style={{ display: 'inline-block' }} /> Loading the 3D laboratory…</div>}>
       <LabView expId={expId} />
@@ -124,15 +118,14 @@ function BottomPane({ expId, open, onToggle }: { expId: string; open: boolean; o
 
 export function Workspace({ expId }: { expId: string }) {
   const narrow = useNarrow();
-  const isPic = getExperiment(expId)?.arch === 'pic18';
   const leftOpen = useLab((s) => s.leftOpen);
   const rightOpen = useLab((s) => s.rightOpen);
   const bottomOpen = useLab((s) => s.bottomOpen);
-  const [mobileTab, setMobileTab] = useState<'code' | 'board' | 'output' | 'debug' | 'lab'>('board');
+  const [mobileTab, setMobileTab] = useState<'board' | 'output' | 'debug' | 'lab'>('board');
   const coding = useBench((s) => s.view === 'computer');
   useEffect(() => { openExperiment(expId); }, [expId]);
   // the bench instruments read the transition log, so it runs even while the output pane is hidden
-  useEffect(() => { if (isPic) sim.send({ type: 'analyzer', enabled: true }); }, [expId, isPic]);
+  useEffect(() => { sim.send({ type: 'analyzer', enabled: true }); }, [expId]);
   // the monitor's coding view gets the whole stage; the output pane comes back on leaving it
   useEffect(() => {
     if (!coding || !useLab.getState().bottomOpen) return;
@@ -141,13 +134,13 @@ export function Workspace({ expId }: { expId: string }) {
   }, [coding]);
 
   if (narrow) {
-    const tabs = ([['lab', 'Lab', 'flask'], ['code', 'Code', 'file'], ['board', isPic ? 'Bench' : 'Board', 'board'], ['output', 'Output', 'terminal'], ['debug', 'Debug', 'bug']] as const).filter((t) => !isPic || t[0] !== 'code');
+    // code is written on the lab computer inside the 3D bench
+    const tabs = [['lab', 'Lab', 'flask'], ['board', 'Bench', 'board'], ['output', 'Output', 'terminal'], ['debug', 'Debug', 'bug']] as const;
     return (
       <div className="ws">
         <TopBar expId={expId} />
         <div className="ws-mobile">
           <div className={mobileTab === 'lab' ? 'mshow' : 'mhide'}><LeftPanel expId={expId} /></div>
-          {!isPic && <div className={mobileTab === 'code' ? 'mshow' : 'mhide'}><CodeEditor expId={expId} /></div>}
           <div className={mobileTab === 'board' ? 'mshow' : 'mhide'}><div className="panel"><div className="panel-body"><Hardware expId={expId} /></div></div></div>
           <div className={mobileTab === 'output' ? 'mshow' : 'mhide'}><BottomPanel expId={expId} /></div>
           <div className={mobileTab === 'debug' ? 'mshow' : 'mhide'}><DebugPanel /></div>
@@ -164,17 +157,7 @@ export function Workspace({ expId }: { expId: string }) {
     <div className="ws">
       <TopBar expId={expId} />
       <div className={`ws-main ws-stage ${leftOpen ? 'l-open' : ''} ${rightOpen ? 'r-open' : ''}`}>
-        {isPic ? (
-          <div className="panel"><div className="panel-body" style={{ overflow: 'hidden' }}><Hardware expId={expId} /></div></div>
-        ) : (
-          <PanelGroup direction="horizontal" autoSaveId="vlab-layout-hc">
-            <Panel id="editor" order={1} defaultSize={46} minSize={20}><CodeEditor expId={expId} /></Panel>
-            <PanelResizeHandle className="resize-h" />
-            <Panel id="board" order={2} defaultSize={54} minSize={20}>
-              <div className="panel"><div className="panel-body" style={{ overflow: 'hidden' }}><Hardware expId={expId} /></div></div>
-            </Panel>
-          </PanelGroup>
-        )}
+        <div className="panel"><div className="panel-body" style={{ overflow: 'hidden' }}><Hardware expId={expId} /></div></div>
 
         <SidePane side="left" title="Lab sheet" icon="flask" open={leftOpen} onToggle={() => set({ leftOpen: !leftOpen })}>
           <LeftPanel expId={expId} />

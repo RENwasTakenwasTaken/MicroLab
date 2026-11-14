@@ -5,7 +5,8 @@
 // instruments and the MCU always agree.
 
 import { create } from 'zustand';
-import type { PicBoardConfig } from '../sim/board/types.ts';
+import type { FrcTarget, Mcs51BoardConfig, PicBoardConfig } from '../sim/board/types.ts';
+import type { DebugInfo } from '../sim/protocol.ts';
 import { DESK_Y, SOCKET, boardToWorld, type V3 } from '../lab3d/world.ts';
 import { sim } from './sim.ts';
 import { useLab } from './store.ts';
@@ -24,18 +25,56 @@ export interface Plug {
 
 export type ViewMode = 'lab' | 'computer' | 'board' | 'scope' | 'dmm' | 'pins' | 'lcd' | 'top';
 
-export interface ScopeSettings { vdiv: [number, number]; sdiv: number; running: boolean; on: boolean }
+/** Input coupling of a scope channel: DC, AC (series capacitor, ~10 Hz high-pass) or Ground (0 V reference). */
+export type ScopeCoupling = 'DC' | 'AC' | 'GND';
+export interface ScopeSettings {
+  vdiv: [number, number]; sdiv: number; running: boolean; on: boolean;
+  coupling: [ScopeCoupling, ScopeCoupling];
+  /** side menu on the screen: 0 = AUTOSET, 1 = CH1 MENU, 2 = CH2 MENU */
+  menu: 0 | 1 | 2;
+}
 export interface DmmSettings { on: boolean; mode: 'V' | 'OHM' | 'HZ' | 'UA' | 'MA' | 'A' | 'TEMP' }
 export interface GenSettings { on: boolean; freq: number; wave: 'sine' | 'triangle' | 'square'; amp: number }
 
 export type UploadPhase = 'idle' | 'compiling' | 'compile-error' | 'built' | 'blocked' | 'nodevice' | 'erasing' | 'programming' | 'verifying' | 'done' | 'error';
 export interface UploadState { phase: UploadPhase; progress: number; log: string[]; error?: string }
 
+/**
+ * Lab computer for the 8051 kit: Keil µVision 5 (project "lab", target SST89E516RD2) builds
+ * .\Objects\lab.hex, SST EasyIAP downloads it over the USB-UART (COM3, CP2102).
+ */
+export interface KeilState {
+  /** which program is in front on the lab computer */
+  app: 'keil' | 'iap';
+  phase: 'idle' | 'building' | 'ok' | 'failed';
+  /** Build Output window */
+  log: string[];
+  /** Options for Target → Output → Create HEX File (off in a new µVision project) */
+  createHex: boolean;
+  optionsOpen: boolean;
+  /** .\Objects\lab.hex on disk: what EasyIAP can download */
+  hexFile: { at: number; bytes: number; source: string; hex: string; debug?: DebugInfo } | null;
+}
+export interface IapState {
+  /** EasyIAP has talked to the boot firmware (Detect MCU succeeded) */
+  detected: boolean;
+  /** Detect MCU is waiting for a RESET press: deadline (ms since epoch) */
+  waitUntil: number | null;
+  log: string[];
+}
+export const initialKeil = (): KeilState => ({ app: 'keil', phase: 'idle', log: [], createHex: false, optionsOpen: false, hexFile: null });
+export const initialIap = (): IapState => ({ detected: false, waitUntil: null, log: [] });
+
 export const DMM_MODES: DmmSettings['mode'][] = ['V', 'OHM', 'HZ', 'UA', 'MA', 'A', 'TEMP'];
 export const SDIV_STEPS = [5e-6, 10e-6, 25e-6, 50e-6, 100e-6, 250e-6, 500e-6, 1e-3, 2.5e-3, 5e-3, 10e-3, 25e-3, 50e-3, 100e-3, 250e-3, 500e-3, 1];
 export const VDIV_STEPS = [0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10];
 
 const PORT_SOCKETS = ['frc:PORT-A', 'frc:PORT-B', 'frc:PORT-C', 'frc:PORT-D', 'frc:PORT-E'];
+/** EXCEL-51 module: PORT-0..PORT-3 FRC headers (port index 0..3). */
+const PORT_SOCKETS_51 = ['frc:P0', 'frc:P1', 'frc:P2', 'frc:P3'];
+const is51 = () => useLab.getState().arch === 'mcs51';
+/** Where the USB Type-B cable has to go: the PIC module's own USB port, or the base board's USB2UART port (8051 kit). */
+export const usbSocketId = () => (is51() ? 'usb:uart' : 'usb:board');
 const TARGETS: Record<string, keyof PicBoardConfig['cables']> = { 'frc:LBANK': 'LBANK', 'frc:KEY': 'KEY', 'frc:LCD_DATA': 'LCD_DATA', 'frc:LCD_CTRL': 'LCD_CTRL' };
 
 interface BenchState {
@@ -56,6 +95,9 @@ interface BenchState {
   powerSwitch: boolean;
   /** Expt 6: the LM35 temperature was changed in the Hardware tab while the program ran */
   tempAdjusted: boolean;
+  /** 8051 kit: Keil µVision and SST EasyIAP on the lab computer */
+  keil: KeilState;
+  iap: IapState;
   setView(v: ViewMode): void;
   setPowerSwitch(on: boolean): void;
   set(p: Partial<BenchState>): void;
@@ -92,12 +134,12 @@ function initialPlugs(): Record<string, Plug> {
 }
 
 /** FRC ribbons -> electrical port mapping. A ribbon only conducts with one end on a module port and the other on a peripheral. */
-export function ribbonMapping(plugs: Record<string, Plug>): PicBoardConfig['cables'] {
+export function ribbonMapping(plugs: Record<string, Plug>, ports = PORT_SOCKETS): PicBoardConfig['cables'] {
   const cables: PicBoardConfig['cables'] = { LBANK: null, KEY: null, LCD_DATA: null, LCD_CTRL: null };
   for (let i = 0; i < 4; i++) {
     const a = plugs[`rib${i}:a`]?.attachedTo, b = plugs[`rib${i}:b`]?.attachedTo;
     if (!a || !b) continue;
-    const port = PORT_SOCKETS.indexOf(PORT_SOCKETS.includes(a) ? a : b);
+    const port = ports.indexOf(ports.includes(a) ? a : b);
     const target = TARGETS[TARGETS[a] ? a : b];
     if (port >= 0 && target) cables[target] = port;
   }
@@ -120,7 +162,6 @@ export const boardPowered = () => mainsConnected() && useBench.getState().powerS
 let sentPower: boolean | null = null;
 /** Push the board's power state to the simulator when it changes (force: always send). */
 export function syncPower(force = false) {
-  if (useLab.getState().arch !== 'pic18') return;
   const on = boardPowered();
   if (!force && on === sentPower) return;
   sentPower = on;
@@ -129,6 +170,15 @@ export function syncPower(force = false) {
 
 function syncElectrical(plugs: Record<string, Plug>) {
   const lab = useLab.getState();
+  if (lab.arch === 'mcs51') {
+    // EXCEL-51: ribbons from PORT-0..3 (the 8051 model drives the base board's LED bank only)
+    const old = lab.boardCfg as Mcs51BoardConfig;
+    const cables = ribbonMapping(plugs, PORT_SOCKETS_51);
+    if (JSON.stringify(cables) === JSON.stringify(old.cables)) return;
+    lab.set({ boardCfg: { ...old, cables } });
+    for (const t of Object.keys(cables) as FrcTarget[]) sim.input({ kind: 'cable', target: t, port: cables[t] });
+    return;
+  }
   if (lab.arch !== 'pic18') return;
   const old = lab.boardCfg as PicBoardConfig;
   const cfg = structuredClone(old);
@@ -146,7 +196,7 @@ export const useBench = create<BenchState>((set, get) => ({
   view: 'lab',
   viewNonce: 0,
   latched: {},
-  scope: { vdiv: [2, 2], sdiv: 1e-3, running: true, on: true },
+  scope: { vdiv: [2, 2], sdiv: 1e-3, running: true, on: true, coupling: ['DC', 'DC'], menu: 0 },
   dmm: { on: true, mode: 'V' },
   gen: { on: true, freq: 504.3, wave: 'sine', amp: 4 },
   dmmAc: false,
@@ -154,6 +204,8 @@ export const useBench = create<BenchState>((set, get) => ({
   toast: null,
   powerSwitch: false,
   tempAdjusted: false,
+  keil: initialKeil(),
+  iap: initialIap(),
 
   setView: (view) => set({ view, viewNonce: get().viewNonce + 1 }),
   setPowerSwitch(on) {
@@ -173,7 +225,7 @@ export const useBench = create<BenchState>((set, get) => ({
     set({ plugs, carrying: plugId });
     syncElectrical(plugs);
     syncPower();
-    if (p.kind === 'usb' && p.attachedTo) get().notify('USB cable unplugged from the board', 'info');
+    if (p.kind === 'usb' && p.attachedTo) get().notify(is51() ? 'USB cable unplugged: the COM port is gone from the lab computer' : 'USB cable unplugged from the board', 'info');
     if (p.kind === 'ac' && p.attachedTo) get().notify('Adapter unplugged from the mains: the board has no power', 'info');
   },
 
@@ -182,6 +234,7 @@ export const useBench = create<BenchState>((set, get) => ({
     const p = plugs[plugId];
     const s = SOCKET[socketId];
     if (!p || !s) return false;
+    if (s.variant && s.variant !== useLab.getState().arch) return false; // that connector is on the other module
     if (s.kind !== p.kind) { get().notify(`${p.label} does not fit ${s.label}`, 'err'); return false; }
     const occupant = Object.values(plugs).find((q) => q.attachedTo === socketId && q.id !== plugId);
     if (occupant && p.kind !== 'probe') { get().notify(`${s.label} is already in use`, 'err'); return false; }
@@ -189,7 +242,8 @@ export const useBench = create<BenchState>((set, get) => ({
       const otherEnd = plugs[`${p.cable}:${p.id.endsWith(':a') ? 'b' : 'a'}`];
       const otherSock = otherEnd?.attachedTo ? SOCKET[otherEnd.attachedTo] : null;
       if (otherSock && otherSock.frcRole === s.frcRole) {
-        get().notify(s.frcRole === 'port' ? 'Both ends on PIC port headers: connect the other end to a peripheral connector' : 'Both ends on peripheral connectors: one end must go to a PIC port header', 'err');
+        const mcu = is51() ? '8051' : 'PIC';
+        get().notify(s.frcRole === 'port' ? `Both ends on ${mcu} port headers: connect the other end to a peripheral connector` : `Both ends on peripheral connectors: one end must go to a ${mcu} port header`, 'err');
         return false;
       }
     }
@@ -197,7 +251,11 @@ export const useBench = create<BenchState>((set, get) => ({
     set({ plugs, carrying: null, snap: null });
     syncElectrical(plugs);
     syncPower();
-    if (p.kind === 'usb') get().notify('USB cable connected successfully', 'ok', 4000);
+    if (p.kind === 'usb') {
+      if (!is51()) get().notify('USB cable connected successfully', 'ok', 4000);
+      else if (socketId === 'usb:uart') get().notify('USB cable connected: the lab computer finds COM3 (Silicon Labs CP210x USB to UART Bridge)', 'ok', 5000);
+      else get().notify('USB cable connected, but the 8051 kit is programmed through the USB2UART port (top-left of the base board)', 'info', 6000);
+    }
     else if (p.kind === 'ac') get().notify(get().powerSwitch ? 'Adapter plugged in: board power ON' : 'Adapter plugged into the wall socket: now switch the board\'s POWER switch ON', 'ok', 4000);
     else get().notify(`${p.label} → ${s.label}`, 'ok');
     return true;
@@ -217,8 +275,9 @@ export function resetBench() {
   useBench.setState({
     plugs: initialPlugs(), carrying: null, view: 'lab', viewNonce: useBench.getState().viewNonce + 1, latched: {},
     upload: { phase: 'idle', progress: 0, log: [] }, powerSwitch: false, tempAdjusted: false,
+    keil: initialKeil(), iap: initialIap(),
   });
   syncPower(true);
 }
 
-export const usbConnected = () => useBench.getState().plugs['usb:b']?.attachedTo === 'usb:board';
+export const usbConnected = () => useBench.getState().plugs['usb:b']?.attachedTo === usbSocketId();

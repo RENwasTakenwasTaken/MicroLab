@@ -33,7 +33,7 @@ class SimClient {
     if (m.type === 'frame') {
       const f = m.data;
       this.latest = f;
-      if (f.cpu.arch === 'pic18' && f.device.flashed !== lab.programmed) lab.set({ programmed: f.device.flashed });
+      if (f.device.flashed !== lab.programmed) lab.set({ programmed: f.device.flashed });
       if (f.logs.length) lab.pushLog(f.logs.map((l) => ({ ...l, wall: Date.now() })));
       if (f.serial.length) lab.appendUart(String.fromCharCode(...f.serial));
       if (f.analyzer) analyzer.ingest(f.analyzer, f.simTime);
@@ -75,10 +75,9 @@ export function openExperiment(id: string) {
   });
   analyzer.clear();
   sim.init(arch, cfg);
-  if (arch === 'pic18') {
-    resetBench();
-    sim.send({ type: 'analyzer', enabled: true }); // the bench oscilloscope needs pin transitions
-  }
+  // both kits sit on the 3D bench: cables unplugged, power off
+  resetBench();
+  sim.send({ type: 'analyzer', enabled: true }); // the bench oscilloscope needs pin transitions
   sim.send({ type: 'speed', value: useLab.getState().speed });
   sim.send({ type: 'breakpoints', lines: useLab.getState().breakpoints[id] ?? [] });
 }

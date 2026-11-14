@@ -24,7 +24,7 @@ export const deviceReady = () => {
   return usbConnected() && !!f && f.board.power && f.device.mode === 'bootloader';
 };
 
-function bootloaderCommand(msg: { type: 'erase' } | { type: 'flash'; hex: string; debug?: unknown }): Promise<Extract<FromWorker, { type: 'bootloader' }>> {
+export function bootloaderCommand(msg: { type: 'erase' } | { type: 'flash'; hex: string; debug?: unknown }): Promise<Extract<FromWorker, { type: 'bootloader' }>> {
   return new Promise((resolve) => {
     const op = msg.type;
     const off = sim.on((m) => {

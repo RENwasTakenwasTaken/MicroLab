@@ -6,11 +6,11 @@ import { useMemo, useRef, type ReactNode } from 'react';
 import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
 import { analyzer } from '../app/analyzer.ts';
-import { DMM_MODES, SDIV_STEPS, VDIV_STEPS, useBench } from '../app/bench.ts';
+import { DMM_MODES, SDIV_STEPS, VDIV_STEPS, useBench, type ScopeCoupling } from '../app/bench.ts';
 import { sim } from '../app/sim.ts';
 import { useHover } from '../three/interactive.tsx';
 import { CanvasScreen, drawDmm, drawGen, drawScope, type ScopeView } from './screens.ts';
-import { genValue, nodeDc, nodeFreq, nodeTrace, plugNode, triggerTime } from './signals.ts';
+import { coupledTrace, genValue, nodeDc, nodeFreq, plugNode, traceStats, triggerTime } from './signals.ts';
 import { DMM, SCOPE, SIGGEN, SOCKET } from './world.ts';
 
 const carrying = () => !!useBench.getState().carrying;
@@ -88,6 +88,7 @@ export function Oscilloscope() {
     t(26, 66, '60 MHz  1 GS/s', 2.4, false, '#555');
     t(42, 52, 'VERTICAL', 2.6, true); t(120, 52, 'HORIZ', 2.6, true); t(148, 52, 'TRIG', 2.6, true);
     t(25, 33, 'VOLTS/DIV', 2.4, true); t(60, 33, 'VOLTS/DIV', 2.4, true); t(100, 33, 'SEC/DIV', 2.4, true);
+    t(25, 12.6, 'CH 1 MENU', 2, true); t(60, 12.6, 'CH 2 MENU', 2, true);
     t(66, 6, 'CH 1', 2.4, true); t(102, 6, 'CH 2', 2.4, true); t(138, 6, 'EXT TRIG', 2.2, true);
     t(118, 64, 'AUTOSET', 2.2, true); t(148, 64, 'RUN/STOP', 2.2, true);
     t(30, 64, 'SAVE/RECALL  MEASURE  ACQUIRE', 2, false);
@@ -95,11 +96,12 @@ export function Oscilloscope() {
 
   const hover = useHover({
     name: 'Tektronix TDS1002 oscilloscope',
-    info: 'Each probe\'s crocodile clip holds a male-to-female jumper: put its female end on a header pin, and the ground jumper on GND (UART header). Knobs: click +, right-click −. AUTOSET fits the CH1 signal.',
+    info: 'Each probe\'s crocodile clip holds a male-to-female jumper: put its female end on a header pin, and the ground jumper on GND (UART header). Knobs: click +, right-click −. AUTOSET fits the CH1 signal. CH 1 / CH 2 MENU, then the top option button: Coupling DC / AC / Ground.',
     live: () => {
       const g = plugNode('scope:gnd')?.kind === 'gnd';
+      const sc = useBench.getState().scope;
       const ch = (id: string) => { const s = useBench.getState().plugs[id]?.attachedTo; return s ? SOCKET[s]?.label ?? s : '—'; };
-      return `CH1: ${ch('ch1')}  ·  CH2: ${ch('ch2')}\nground: ${g ? 'connected' : 'NOT connected (no trace from the board)'}`;
+      return `CH1: ${ch('ch1')} (${sc.coupling[0]})  ·  CH2: ${ch('ch2')} (${sc.coupling[1]})\nground: ${g ? 'connected' : 'NOT connected (no trace from the board)'}`;
     },
   });
 
@@ -126,24 +128,30 @@ export function Oscilloscope() {
         if (trig !== null) { t0 = trig - span / 2; t1 = trig + span / 2; triggered = true; }
         genT0 = t0;
       }
-      const traces = [n1, n2].map((n) => (n ? nodeTrace(n, f, gen, t0, t1, genT0) : null));
+      const traces = [n1, n2].map((n, ch) => (n ? coupledTrace(n, f, gen, t0, t1, genT0, sc.coupling[ch]) : null));
       let meas: ScopeView['meas'] = null;
-      if (n1) {
+      if (n1 && sc.coupling[0] === 'GND') meas = { pkpk: 0, freq: 0, period: 0, rms: 0 };
+      else if (n1) {
         if (n1.kind === 'gen') {
           const a = gen.on ? gen.amp : 0;
           meas = { pkpk: a, freq: gen.on ? gen.freq : 0, period: gen.on ? 1 / gen.freq : 0, rms: gen.wave === 'square' ? a / 2 : gen.wave === 'sine' ? a / 2 / Math.SQRT2 : a / 2 / Math.sqrt(3) };
-        } else if (n1.kind === 'pin' && traces[0]?.kind === 'digital') {
+        } else if (n1.kind === 'pin' && (traces[0]?.kind === 'digital' || sc.coupling[0] === 'AC')) {
+          // frequency and period come from the pin's edges whatever the coupling
           const m = analyzer.measure(n1.port, n1.bit, Math.max(span, 0.05));
           meas = m ? { pkpk: 5, freq: m.freq, period: m.period, rms: 5 * Math.sqrt(m.duty) } : { pkpk: 5, freq: 0, period: 0, rms: 0 };
         } else {
           const dc = nodeDc(n1, f, gen) ?? 0;
           meas = { pkpk: 0, freq: 0, period: 0, rms: dc };
         }
+        // AC coupling: amplitude and RMS are read off the displayed (capacitor-coupled) trace
+        if (meas && sc.coupling[0] === 'AC' && traces[0]) meas = { ...meas, ...traceStats(traces[0].pts) };
       }
-      view = { traces, t0, t1, vdiv: sc.vdiv, sdiv: sc.sdiv, running: true, triggered, meas };
+      view = { traces, t0, t1, vdiv: sc.vdiv, sdiv: sc.sdiv, running: true, triggered, meas, coupling: sc.coupling, menu: sc.menu };
       frozen.current = view;
     }
-    const key = sc.running || !frozen.current ? `${now}` : JSON.stringify([sc.vdiv, sc.sdiv, 'stop']);
+    view = { ...view, coupling: sc.coupling, menu: sc.menu };
+    if (import.meta.env.DEV) (window as unknown as { __vlabScope: ScopeView }).__vlabScope = view;
+    const key = sc.running || !frozen.current ? `${now}` : JSON.stringify([sc.vdiv, sc.sdiv, sc.coupling, sc.menu, 'stop']);
     drawScope(screen, view, key);
   });
 
@@ -158,6 +166,15 @@ export function Oscilloscope() {
     const vd = n1?.kind === 'gen' ? nearest(VDIV_STEPS, useBench.getState().gen.amp / 6) : 2;
     setScope({ sdiv, vdiv: [vd, sc.vdiv[1]], running: true });
   };
+  const openMenu = (ch: 1 | 2) => setScope({ menu: useBench.getState().scope.menu === ch ? 0 : ch });
+  const cycleCoupling = () => {
+    const sc = useBench.getState().scope;
+    if (sc.menu === 0) return;
+    const next: Record<ScopeCoupling, ScopeCoupling> = { DC: 'AC', AC: 'GND', GND: 'DC' };
+    const coupling = [...sc.coupling] as [ScopeCoupling, ScopeCoupling];
+    coupling[sc.menu - 1] = next[coupling[sc.menu - 1]];
+    setScope({ coupling });
+  };
   const fz = d / 2 + 0.3;
   return (
     <group position={SCOPE.pos} rotation={[0, SCOPE.rotY, 0]}>
@@ -171,7 +188,14 @@ export function Oscilloscope() {
         {/* screen */}
         <mesh position={[-82, 6, fz + 0.4]}><boxGeometry args={[150, 112, 1]} /><meshStandardMaterial color="#c9c6bd" /></mesh>
         <mesh position={[-82, 6, fz + 1.1]}><planeGeometry args={[140, 105]} /><meshBasicMaterial map={screen.texture} toneMapped={false} /></mesh>
-        {[0, 1, 2, 3, 4].map((i) => <Button key={i} pos={[3, 40 - i * 20, fz + 2]} size={[9, 8]} name="Option button" />)}
+        {[0, 1, 2, 3, 4].map((i) => (
+          <Button key={i} pos={[3, 40 - i * 20, fz + 2]} size={[9, 8]} name="Option button"
+            info={i === 0 ? 'With CH 1 / CH 2 MENU open: Coupling DC → AC → Ground' : 'Option button (this setting is not simulated)'}
+            onPress={i === 0 ? cycleCoupling : undefined} />
+        ))}
+        {/* channel menus: the side menu then sets that channel's input coupling */}
+        <Button pos={[25, 6, fz + 2]} size={[13, 6]} color="#e8e6dd" name="CH 1 MENU" info="Opens the CH1 menu (press again to close). The top option button then sets Coupling: DC / AC / Ground." onPress={() => openMenu(1)} />
+        <Button pos={[60, 6, fz + 2]} size={[13, 6]} color="#e8e6dd" name="CH 2 MENU" info="Opens the CH2 menu (press again to close). The top option button then sets Coupling: DC / AC / Ground." onPress={() => openMenu(2)} />
         <Button pos={[118, 58, fz + 2]} size={[16, 7]} name="AUTOSET" info="Automatically sets SEC/DIV and VOLTS/DIV for CH1" onPress={autoset} />
         <Button pos={[148, 58, fz + 2]} size={[14, 7]} color="#e8e6dd" name="RUN/STOP" info="Freeze / resume acquisition" onPress={() => setScope({ running: !useBench.getState().scope.running })} />
         {[25, 60, 100].map((x) => <Knob key={`p${x}`} pos={[x, 22, fz]} r={6} name="POSITION" />)}

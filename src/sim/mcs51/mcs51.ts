@@ -79,10 +79,15 @@ export class Mcs51 implements McuCore {
   powerDown = false;
   lastTrap = '';
 
-  constructor(bus: PinBus, variant: 'AT89C51' | 'AT89S52' = 'AT89C51') {
+  /** on-chip flash size (bytes) */
+  flashSize: number;
+
+  constructor(bus: PinBus, variant: 'AT89C51' | 'AT89S52' | 'SST89E516RD2' = 'AT89C51') {
     this.bus = bus;
     this.name = variant;
-    this.is8052 = variant === 'AT89S52';
+    // SST89E516RD2: 8052 core (256 B IRAM, Timer 2) with 64 KB flash
+    this.is8052 = variant !== 'AT89C51';
+    this.flashSize = variant === 'SST89E516RD2' ? 0x10000 : this.is8052 ? 0x2000 : 0x1000;
     this.reset();
   }
 
@@ -98,7 +103,7 @@ export class Mcs51 implements McuCore {
       }
     }
     const warnings: string[] = [];
-    const limit = this.is8052 ? 0x2000 : 0x1000;
+    const limit = this.flashSize;
     let top = 0;
     for (const seg of parseIntelHex(text)) top = Math.max(top, seg.address + seg.data.length);
     if (top > limit) warnings.push(`Program size (${top} bytes) exceeds the ${limit / 1024} KB on-chip flash of the ${this.name}.`);

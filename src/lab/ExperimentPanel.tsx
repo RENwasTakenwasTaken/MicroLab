@@ -51,7 +51,7 @@ function Actual({ m, f, smooth }: { m: Measurement; f: FrameData | null; smooth:
       if (b.kind !== 'mcs51') return null;
       return (
         <span className="led-strip">
-          {[...b.leds].reverse().map((v, i) => <span key={i} className="mini-led" style={{ opacity: 0.15 + v * 0.85, boxShadow: v > 0.3 ? `0 0 ${4 + v * 6}px #ff3b3b` : 'none' }} title={`P${b.ledPort}.${7 - i}`} />)}
+          {[...b.leds].reverse().map((v, i) => <span key={i} className="mini-led" style={{ opacity: 0.15 + v * 0.85, boxShadow: v > 0.3 ? `0 0 ${4 + v * 6}px #ff3b3b` : 'none' }} title={`L${7 - i} (P${b.ledPort}.${7 - i})`} />)}
         </span>
       );
     case 'relay': return b.kind === 'pic' ? <span className={`tag ${b.relay ? 'ok' : ''}`}>{b.relay ? 'ENERGISED (lamp ON)' : 'released'}</span> : null;
@@ -107,7 +107,7 @@ export function ExperimentPanel({ expId }: { expId: string }) {
             </div>
           ))}
         </div>
-        {!f?.loaded && <p className="dim" style={{ marginTop: 8, fontSize: 11.5 }}>{exp.arch === 'mcs51' ? 'Build and start a debug session to see the actual output.' : 'Upload your program through the USB bootloader and press RESET to see the actual output.'}</p>}
+        {!f?.loaded && <p className="dim" style={{ marginTop: 8, fontSize: 11.5 }}>{exp.arch === 'mcs51' ? 'Build in Keil (with Create HEX File), download it with SST EasyIAP and press RESET to see the actual output.' : 'Upload your program through the USB bootloader and press RESET to see the actual output.'}</p>}
       </div>
       <div className="section">
         <h4>Connections</h4>
@@ -132,6 +132,7 @@ export function ExperimentPanel({ expId }: { expId: string }) {
       </div>
       <div className="section">
         <h4>Procedure</h4>
+        {exp.video && <p className="exp-video"><Icon name="play" size={12} /> <a href={exp.video} target="_blank" rel="noopener noreferrer">Watch the setup video</a></p>}
         <ol className="notes">{exp.procedure.map((t) => <li key={t}><MathText text={t} /></li>)}</ol>
       </div>
       <div className="section">

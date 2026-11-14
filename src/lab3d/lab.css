@@ -61,6 +61,7 @@
 .wf-sub li.ok::marker { content: '✓ '; }
 .wf-ok { color: var(--accent); display: block; margin-top: 3px; }
 .wf-err { color: var(--red); }
+.wf-warn { margin-top: 5px; padding: 5px 8px; border-radius: 6px; color: var(--amber); background: rgba(232, 176, 74, 0.1); border: 1px solid rgba(232, 176, 74, 0.35); line-height: 1.35; }
 .wf-phase { margin-left: 4px; font: 600 10px var(--mono); padding: 1px 5px; border-radius: 4px; background: var(--bg-3); color: var(--amber); }
 .wf-phase.done { color: var(--accent); }
 .wf-phase.error, .wf-phase.compile-error, .wf-phase.blocked, .wf-phase.nodevice { color: var(--red); }
@@ -100,3 +101,43 @@
 .held-badge { font: 700 9.5px var(--sans); padding: 1px 5px; border-radius: 4px; background: var(--amber); color: #1a1205; white-space: nowrap; }
 /* keep alerts clear of the software-rendering notice when it is shown */
 .gpu-notice ~ .lab-toast { top: 124px; }
+
+/* ---------- 8051 kit: Keil µVision + SST EasyIAP on the lab computer ---------- */
+.pc51 { position: absolute; }
+.k51-apps { display: inline-flex; gap: 2px; padding: 2px; border-radius: 6px; background: #12161c; border: 1px solid #2a323e; flex: none; }
+.k51-app { height: 1.85em; padding: 0 10px; border: 0; border-radius: 4px; background: transparent; color: var(--fg-2); font-weight: 700; cursor: pointer; }
+.k51-app.on { background: #2b5a9e; color: #fff; }
+.k51-app:not(.on):hover { color: var(--fg-0); background: #232b36; }
+.pc51 .pc-build { border-color: #3d6fb5; }
+.k51-out-title { flex: none; padding: 3px 10px; font: 600 0.82em var(--sans); color: var(--fg-3); border-bottom: 1px solid #1d232c; }
+.k51-modal { position: absolute; inset: 0; z-index: 5; display: grid; place-items: center; background: rgba(0, 0, 0, 0.45); }
+.k51-dlg { width: min(560px, 92%); background: #f0f0f0; color: #1a1a1a; border: 1px solid #7a8a9e; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); font-size: 0.95em; }
+.k51-dlg-title { padding: 6px 10px; background: #dfe6ef; border-bottom: 1px solid #b9c3cf; font-weight: 600; }
+.k51-tabs { display: flex; gap: 2px; padding: 6px 8px 0; border-bottom: 1px solid #b9c3cf; flex-wrap: wrap; }
+.k51-tabs span { padding: 3px 8px; border: 1px solid #c4ccd6; border-bottom: 0; background: #e6e9ee; font-size: 0.9em; color: #555; }
+.k51-tabs span.on { background: #fff; color: #000; font-weight: 600; }
+.k51-dlg-body { padding: 10px 14px; background: #fff; display: flex; flex-direction: column; gap: 8px; }
+.k51-dlg-body .dim { color: #666; }
+.k51-dlg-body code { font: 0.92em var(--mono); background: #eef1f5; padding: 1px 5px; border-radius: 3px; }
+.k51-row { display: flex; gap: 8px; align-items: baseline; }
+.k51-check { display: flex; align-items: center; gap: 6px; font-weight: 600; padding: 6px 8px; border: 1px dashed #b9c3cf; border-radius: 4px; cursor: pointer; }
+.k51-check input { width: 15px; height: 15px; }
+.k51-dlg-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 8px 10px; background: #f0f0f0; border-top: 1px solid #c4ccd6; }
+.k51-dlg-foot .pc-btn { background: #e1e1e1; color: #111; border-color: #adadad; min-width: 6em; }
+.iap { flex: 1; min-height: 0; display: flex; flex-direction: column; background: #ece9d8; color: #1a1a1a; }
+.iap-menu { flex: none; display: flex; gap: 16px; padding: 4px 10px; background: #f5f4ee; border-bottom: 1px solid #b7b3a2; font-size: 0.92em; }
+.iap-menu .iap-name { margin-left: auto; color: #555; }
+.iap-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; }
+.iap-grid { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; align-items: center; max-width: 720px; }
+.iap-grid label { font-weight: 600; color: #333; }
+.iap-grid select { height: 1.9em; font: inherit; background: #fff; color: #111; border: 1px solid #7f9db9; }
+.iap-file { font: 0.92em var(--mono); }
+.iap .c-err { color: #b3261e; } .iap .c-ok { color: #157347; } .iap .c-warn { color: #9a6400; } .iap .dim { color: #666; }
+.iap-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.iap-actions .pc-btn { background: #f4f4f4; color: #111; border-color: #8a8a8a; font-weight: 600; }
+.iap-wait { display: inline-flex; align-items: center; gap: 7px; font-weight: 700; color: #9a3b00; padding: 3px 9px; border-radius: 4px; background: #fff2d6; border: 1px solid #e0a83a; }
+.iap .pc-chip.off { background: #f7dcdc; color: #8c1d18; }
+.iap .pc-chip.ok { background: #d7f0e2; color: #0f5132; }
+.iap .pc-progress { background: #c9c5b2; }
+.iap-log { flex: 1; min-height: 60px; background: #fff; color: #1a1a1a; border: 1px solid #a5a18f; border-radius: 2px; }
+.wf-video { flex: none; margin: 0 12px 8px; }

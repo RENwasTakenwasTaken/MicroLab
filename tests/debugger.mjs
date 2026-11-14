@@ -62,6 +62,64 @@ const ticks = (e, n = 30) => { for (let i = 0; i < n; i++) e.tick(); };
   ok('vectors at 0x0800 rejected/warned like the real bootloader', /warning/.test(bad.log) && w.warnings.some((x) => /below 0x1000/.test(x)), w.warnings[0]);
 }
 
+// ------------------------------------------- SST EasyIAP flow (8051 kit)
+{
+  console.log('SST89E516RD2 IAP workflow (EXCEL-51 kit)');
+  const r = await compile8051(src('exp1_8051_led.c'));
+  ok('Expt 1 program builds for the 8051', r.ok && !!r.hex);
+  const msgs = [];
+  const e = new Engine((m) => msgs.push(m));
+  e.init('mcs51', defaultMcs51Config());
+  const last = (t) => msgs.filter((m) => m.type === t).at(-1);
+  const frame = () => { e.sendFrame(); return last('frame').data; };
+  e.input({ kind: 'power', on: false }); e.input({ kind: 'power', on: true });
+  ok('power on with an empty flash: nothing runs', e.deviceState().mode === 'idle' && !e.deviceState().flashed);
+
+  e.flash(r.hex, r.debug);
+  ok('download refused outside IAP mode', last('bootloader')?.ok === false);
+  btn(e, 'reset', true); btn(e, 'reset', false);
+  ok('RESET without EasyIAP calling: no IAP mode', e.deviceState().mode === 'idle');
+
+  // Detect MCU: the PC sends its handshake, the student presses RESET
+  e.setIapSync(true);
+  btn(e, 'reset', true);
+  ok('RESET held: chip in reset', e.deviceState().mode === 'reset');
+  btn(e, 'reset', false);
+  e.setIapSync(false);
+  ok('RESET released while EasyIAP calls: IAP boot firmware', e.deviceState().mode === 'bootloader');
+
+  e.erase(); e.flash(r.hex, r.debug);
+  const fl = last('bootloader');
+  ok('download accepted in IAP mode', fl?.ok === true && fl.bytes > 0, `${fl?.bytes} bytes`);
+  ok('chip stays in IAP mode after the download', e.deviceState().mode === 'bootloader' && e.deviceState().flashed);
+
+  btn(e, 'reset', true); btn(e, 'reset', false);
+  ok('RESET runs the downloaded program', e.deviceState().mode === 'running');
+  // step ~2.6 s of simulated time and time the P1.0 edges exactly (machine cycles)
+  const hz = e.mcu.cycleHz(), end = e.mcu.cycles + 2.6 * hz;
+  const edges = [];
+  let prev = e.mcu.portState(1).level & 1;
+  while (e.mcu.cycles < end) { e.mcu.step(); const l = e.mcu.portState(1).level & 1; if (l !== prev) { edges.push(e.mcu.cycles / hz); prev = l; } }
+  // (the first two edges are main()'s LED = 0 followed at once by LED = 1)
+  const halves = edges.slice(2).map((t, i) => t - edges[i + 1]);
+  ok('P1.0 toggles every ~500 ms (module LED L0 blinks at ~1 Hz)', halves.length >= 3 && halves.every((h) => h > 0.45 && h < 0.55), halves.map((h) => `${(h * 1000).toFixed(0)} ms`).join(', '));
+  const f = frame();
+  ok('pin monitor reads ~1 Hz on P1.0 (no edges kept from before the reset)', Math.abs(f.ports[1].freq[0] - 0.99) < 0.03, `${f.ports[1].freq[0].toFixed(3)} Hz`);
+  ok('module LEDs follow P1 (L1-L7 lit, P1 = 0xFF after reset)', f.board.kind === 'mcs51' && f.board.leds.slice(1).every((v) => v > 0.9), f.board.leds.map((v) => v.toFixed(1)).join(' '));
+
+  e.input({ kind: 'power', on: false });
+  ok('power off: module LEDs dark', frame().board.leds.every((v) => v === 0));
+  e.input({ kind: 'power', on: true });
+  ok('program survives a power cycle and starts at power-on', e.deviceState().mode === 'running' && e.deviceState().flashed);
+
+  // a ribbon from PORT-1 to L_BANK drives the base board's LED bank
+  e.input({ kind: 'cable', target: 'LBANK', port: 1 });
+  frame();
+  for (let i = 0; i < 20000; i++) e.mcu.step();
+  const bank = frame().board.bank;
+  ok('L_BANK ribbon on PORT-1: base LED bank mirrors P1', bank.slice(1).every((v) => v > 0.9), bank.map((v) => v.toFixed(1)).join(' '));
+}
+
 // ------------------------------------------------- breakpoints / stepping
 async function session(arch, file, bpLine) {
   const r = arch === 'pic18' ? await compilePic18(src(file)) : await compile8051(src(file));

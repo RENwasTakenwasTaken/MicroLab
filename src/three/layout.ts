@@ -12,7 +12,9 @@ import type { FrcTarget } from '../sim/board/types.ts';
 export const BASE = { w: 139, h: 188, t: 1.6, color: '#1d6b3c' };
 export const MODULE = { x: 0, y: 49.5, w: 83, h: 92, t: 1.6, elevation: 11, color: '#1f7542' };
 
-export type PortFrc = 'PORT-A' | 'PORT-B' | 'PORT-C' | 'PORT-D' | 'PORT-E';
+export type PortFrc = 'PORT-A' | 'PORT-B' | 'PORT-C' | 'PORT-D' | 'PORT-E' | 'P0' | 'P1' | 'P2' | 'P3';
+/** Which module sits on the base board: the EXCEL PIC V1.0 (PIC18F4550) or the EXCEL-51 v1.0 (SST89E516RD2). */
+export type BoardVariant = 'pic18' | 'mcs51';
 
 interface Base { id?: string; x: number; y: number; rot?: number; name?: string; info?: string; onModule?: boolean }
 
@@ -156,7 +158,7 @@ export const PARTS: Part[] = [
   { kind: 'jumper', x: 100, y: 183, n: 2, rot: 90, cap: 0, name: 'JP4 (GLCD)' },
 
   // ----------------------------------------------------- serial / USB
-  { kind: 'usbB', x: 10.7, y: 173, rot: 180, name: 'USB2UART', info: 'USB to UART bridge (CP2102). Opens the virtual serial terminal.' },
+  { kind: 'usbB', x: 10.7, y: 173, rot: 0, name: 'USB2UART', info: 'USB to UART bridge (CP2102). Opens the virtual serial terminal.' },
   { kind: 'qfn', size: 4, x: 15, y: 151.5, name: 'U10 CP2102' },
   { kind: 'led', color: 'green', d: 3, x: 27, y: 162, signal: 'TXLED', name: 'LP2 TX' },
   { kind: 'led', color: 'green', d: 3, x: 28, y: 167, signal: 'RXLED', name: 'LP3 RX' },
@@ -328,10 +330,124 @@ export const LABELS: SilkLabel[] = [
   { text: '1', x: 31, y: 108, size: 1.1, rot: 180, onModule: true },
 ];
 
-/** Silkscreen names of the base-board FRC connectors. */
-export const FRC_LABEL: Record<string, string> = { LBANK: 'L_BANK', KEY: 'MAT_KEY', LCD_DATA: 'LCD_DATA', LCD_CTRL: 'LCD_CNTRL' };
+/** Silkscreen names of the base-board FRC connectors (and of the 8051 module's port headers). */
+export const FRC_LABEL: Record<string, string> = { LBANK: 'L_BANK', KEY: 'MAT_KEY', LCD_DATA: 'LCD_DATA', LCD_CTRL: 'LCD_CNTRL', P0: 'PORT-0', P1: 'PORT-1', P2: 'PORT-2', P3: 'PORT-3' };
 
-/** Where each FRC connector's ribbon attaches (centre, photo mm) and on which board. */
-export const FRC_POINTS: Record<string, { x: number; y: number; rot: number; module: boolean }> = Object.fromEntries(
-  PARTS.filter((p): p is Part & { kind: 'boxHeader' } => p.kind === 'boxHeader' && !!p.frc).map((p) => [p.frc!, { x: p.x, y: p.y, rot: p.rot ?? 0, module: !!p.onModule }]),
+type FrcPoints = Record<string, { x: number; y: number; rot: number; module: boolean }>;
+const frcPoints = (parts: Part[]): FrcPoints => Object.fromEntries(
+  parts.filter((p): p is Part & { kind: 'boxHeader' } => p.kind === 'boxHeader' && !!p.frc).map((p) => [p.frc!, { x: p.x, y: p.y, rot: p.rot ?? 0, module: !!p.onModule }]),
 );
+/** Where each FRC connector's ribbon attaches (centre, photo mm) and on which board (PIC kit). */
+export const FRC_POINTS: FrcPoints = frcPoints(PARTS);
+
+// =================================================================== EXCEL-51 MODULE
+// Smart Logic Technologies "51 uC DEVELOPMENT BOARD" EXCEL-51 v1.0 (REV1.0 MAY-17): same
+// footprint and stacking connectors as the PIC module, on the same base board. Positions were
+// measured on the lab photo of the kit (approximate, same photo coordinates as the base board).
+const ledY51 = [82.5, 86.4, 90.3, 94.2, 98.1, 102, 105.9, 109.9]; // L0..L7
+export const MODULE51_PARTS: Part[] = [
+  { onModule: true, kind: 'header', n: 20, female: true, x: 39.3, y: 53.6, rot: 0, name: 'CN1' },
+  { onModule: true, kind: 'boxHeader', color: 'white', frc: 'P0', x: 28, y: 61.9, rot: 0, name: 'PORT-0 FRC', info: 'PORT-0 10-pin FRC: P0.0–P0.7, GND, VCC. Port 0 is open-drain: RP1 gives it pull-ups.' },
+  { onModule: true, kind: 'boxHeader', color: 'white', frc: 'P2', x: 55, y: 60.7, rot: 0, name: 'PORT-2 FRC', info: 'PORT-2 10-pin FRC: P2.0–P2.7, GND, VCC.' },
+  { onModule: true, kind: 'header', n: 10, x: 29.7, y: 75.4, rot: 0, name: 'PORT-0 pins' },
+  { onModule: true, kind: 'header', n: 10, x: 56, y: 75.2, rot: 0, name: 'PORT-2 pins' },
+  { onModule: true, kind: 'sip', n: 9, x: 31, y: 79.5, rot: 0, name: 'RP1 resistor network', info: 'Pull-up network for the open-drain Port 0 (assumed 10 kΩ).' },
+  { onModule: true, kind: 'tact', cap: 'silver', id: 'reset-51', input: 'reset', x: 76.2, y: 72.2, size: 6, name: 'RESET (module)', info: 'Resets the SST89E516RD2 (RST held high while pressed). Releasing it starts your program, or, while SST EasyIAP is detecting the chip, enters the IAP boot firmware.' },
+  { onModule: true, kind: 'header', n: 20, female: true, x: 45.2, y: 83, rot: 0, name: 'CN4 (pins 40–21)' },
+  { onModule: true, kind: 'zif', x: 40.7, y: 95.9, rot: 0, name: '40-pin ZIF socket' },
+  { onModule: true, kind: 'dip', pins: 40, wide: true, x: 42.2, y: 96.4, rot: 0, label: 'SST89E516RD2', sub: '40-C-PIE', name: 'SST89E516RD2', info: 'SST FlashFlex51: 8052-compatible core, 64 KB flash, 1 KB RAM, 11.0592 MHz crystal. Programmed over the UART by its IAP boot firmware (SST EasyIAP).' },
+  { onModule: true, kind: 'header', n: 20, female: true, x: 45.2, y: 109.7, rot: 0, name: 'CN3 (pins 1–20)' },
+  { onModule: true, kind: 'crystal', type: 'hc49', x: 68.5, y: 114.3, rot: 0, label: '11.0592', name: 'Y1 11.0592 MHz crystal', info: '11.0592 MHz: gives standard baud rates (9600 with TH1 = 0xFD) and a 921.6 kHz machine cycle.' },
+  { onModule: true, kind: 'capC', x: 71.5, y: 118.5, color: '#c98a3a', name: 'C5' },
+  { onModule: true, kind: 'capC', x: 75, y: 118.5, color: '#c98a3a', name: 'C6' },
+  ...ledY51.map((y, i): Part => ({ onModule: true, kind: 'led', id: `M${i}`, color: 'red', d: 3, x: 77.8, y, signal: `M${i}`, name: `L${i} (module)`, info: `Module LED L${i} on P1.${i}: lights when P1.${i} = 1 (active high).` })),
+  { onModule: true, kind: 'jumper', x: 80.2, y: 114.7, n: 2, rot: 90, cap: 0, name: 'JP3', info: 'Module LED enable jumper (assumed: fitted).' },
+  { onModule: true, kind: 'resistor', x: 80.6, y: 122.6, rot: 90, name: 'R4' },
+  { onModule: true, kind: 'resistor', x: 80.6, y: 131.3, rot: 90, name: 'R3' },
+  { onModule: true, kind: 'tact', cap: 'white', id: 'pb1-51', x: 72.6, y: 127.8, size: 6, name: 'PB1', info: 'Module push button PB1 (connection not identified; not simulated).' },
+  { onModule: true, kind: 'tact', cap: 'white', id: 'pb0-51', x: 72.6, y: 138.5, size: 6, name: 'PB0', info: 'Module push button PB0 (connection not identified; not simulated).' },
+  { onModule: true, kind: 'header', n: 10, x: 28.2, y: 118.7, rot: 0, name: 'PORT-1 pins' },
+  { onModule: true, kind: 'header', n: 10, x: 56, y: 118.7, rot: 0, name: 'PORT-3 pins' },
+  { onModule: true, kind: 'boxHeader', color: 'white', frc: 'P1', x: 25.8, y: 131.3, rot: 0, name: 'PORT-1 FRC', info: 'PORT-1 10-pin FRC: P1.0–P1.7, GND, VCC. P1 also drives the module LEDs L0–L7.' },
+  { onModule: true, kind: 'boxHeader', color: 'white', frc: 'P3', x: 55.8, y: 131.5, rot: 0, name: 'PORT-3 FRC', info: 'PORT-3 10-pin FRC: P3.0–P3.7 (RXD, TXD, INT0, INT1, T0, T1, WR, RD), GND, VCC.' },
+  { onModule: true, kind: 'header', n: 20, female: true, x: 40.3, y: 141.3, rot: 0, name: 'CN2' },
+  { onModule: true, kind: 'header', n: 3, rows: 2, x: 5.6, y: 94.4, rot: 0, name: '2×3 header', info: 'Function not identified (not used in the practicals).' },
+  { onModule: true, kind: 'led', color: 'green', d: 3, x: 2, y: 79, signal: 'POWER', name: 'LP1 POWER', info: 'Module power LED.' },
+  { onModule: true, kind: 'jumper', x: 10.1, y: 80.2, n: 3, rot: 90, cap: 1, name: 'USB / POWER / EXT', info: 'Module supply select (left as found: powered from the base board).' },
+];
+
+const V51 = -90;
+export const MODULE51_LABELS: SilkLabel[] = [
+  { text: '51 \u00b5C DEVELOPMENT BOARD', x: 40.5, y: 137.4, size: 2.1, rot: 180, bold: true, onModule: true },
+  { text: 'SMART LOGIC TECHNOLOGIES', x: 56, y: 79.9, size: 1.5, rot: 180, bold: true, onModule: true },
+  { text: 'EXCEL-51 v1.0', x: 56, y: 77.9, size: 1.4, rot: 180, onModule: true },
+  { text: 'REV1.0  MAY-17', x: 3.2, y: 112, size: 1.4, rot: V51, onModule: true },
+  { text: 'PORT-0', x: 28, y: 68.3, size: 1.6, rot: 180, onModule: true },
+  { text: 'PORT-2', x: 55, y: 67.6, size: 1.6, rot: 180, onModule: true },
+  { text: 'PORT-1', x: 25.8, y: 125.1, size: 1.6, rot: 180, onModule: true },
+  { text: 'PORT-3', x: 55.8, y: 125.1, size: 1.6, rot: 180, onModule: true },
+  { text: 'P0.7 P0.6 P0.5 P0.4 P0.3 P0.2 P0.1 P0.0 GND VCC', x: 29.7, y: 72.8, size: 0.8, rot: 180, onModule: true },
+  { text: 'P2.7 P2.6 P2.5 P2.4 P2.3 P2.2 P2.1 P2.0 GND VCC', x: 56, y: 72.6, size: 0.8, rot: 180, onModule: true },
+  { text: 'VCC GND P1.0 P1.1 P1.2 P1.3 P1.4 P1.5 P1.6 P1.7', x: 28.2, y: 121.2, size: 0.8, rot: 180, onModule: true },
+  { text: 'VCC GND P3.0 P3.1 P3.2 P3.3 P3.4 P3.5 P3.6 P3.7', x: 56, y: 121.2, size: 0.8, rot: 180, onModule: true },
+  { text: 'RESET', x: 76.2, y: 68, size: 1.2, rot: 180, onModule: true },
+  { text: 'PB1', x: 72.6, y: 123.6, size: 1.2, rot: 180, onModule: true },
+  { text: 'PB0', x: 72.6, y: 134.3, size: 1.2, rot: 180, onModule: true },
+  ...ledY51.map((y, i): SilkLabel => ({ text: `L${i}`, x: 81, y, size: 1.1, rot: 180, onModule: true })),
+  { text: 'JP3', x: 80.2, y: 118.6, size: 1, rot: 180, onModule: true },
+  { text: 'LP1', x: 2, y: 75.6, size: 1.1, rot: V51, onModule: true },
+  { text: 'USB POWER EXT', x: 13.8, y: 80.2, size: 1, rot: V51, onModule: true },
+  { text: 'PS', x: 7.5, y: 58, size: 1.3, rot: 180, onModule: true },
+  { text: 'U4', x: 15, y: 104, size: 1.2, rot: 180, onModule: true },
+  { text: 'CN1', x: 12, y: 53.6, size: 1.2, rot: 180, onModule: true },
+  { text: 'CN2', x: 13.5, y: 141.3, size: 1.2, rot: 180, onModule: true },
+  { text: 'CN3', x: 18, y: 109.7, size: 1.1, rot: 180, onModule: true },
+  { text: 'CN4', x: 18, y: 83, size: 1.1, rot: 180, onModule: true },
+  { text: 'Y1', x: 68.5, y: 110.8, size: 1.1, rot: 180, onModule: true },
+  { text: 'RP1', x: 44.5, y: 79.5, size: 1.1, rot: 180, onModule: true },
+];
+
+/**
+ * Base-board tooltips with the 8051 kit fitted: the SST column of PICT's "Explore Board
+ * Connections" chart. The 8051 model drives the module LEDs and the base-board LED bank; the
+ * other base-board peripherals are not simulated with this module yet.
+ */
+const NOT51 = ' Not simulated with the 8051 module in this version.';
+const INFO51: Record<string, string> = {
+  sw0: 'Push button SW0 \u2192 P0.2 (SST column of the PICT chart).' + NOT51,
+  sw1: 'Push button SW1 \u2192 P0.3 (SST column of the PICT chart).' + NOT51,
+  'reset-base': 'Base-board RESET: resets the SST89E516RD2 like the module\u2019s RESET button (assumed).',
+  'boot-base': 'BOOT is the PIC module\u2019s USB-bootloader button: the 8051 module does not use it.',
+  'U2 DS1307 RTC': 'I2C real-time clock: SCL \u2190 P0.5, SDA \u2194 P0.4 (SST column; visual only).',
+  'U3 24C04 EEPROM': 'I2C EEPROM: SCL \u2190 P0.5, SDA \u2194 P0.4 (SST column; visual only).',
+  SPI_SW: 'SPI routing: SCK \u2190 P1.7, SDI \u2190 P1.6, SDO \u2192 P1.5, CS_EEPROM \u2190 P1.4, CS_DAC \u2190 P1.3 (SST column; visual only).',
+  'U6 L293D': 'Dual H-bridge: EN1 \u2190 P1.0, IN1 \u2190 P2.4, IN2 \u2190 P2.3, EN2 \u2190 P1.1, IN3 \u2190 P0.7, IN4 \u2190 P0.6 (SST column).' + NOT51,
+  'dip-dcm': '1: EN1 \u2190 P1.0   2: IN1 \u2190 P2.4   3: IN2 \u2190 P2.3   4: EN2 \u2190 P1.1   (SST column).' + NOT51,
+  relay: '5 V SPDT relay \u2190 P2.5 through PERI_SW 4 (SST column).' + NOT51,
+  'dip-periph': '1: RGB red \u2190 P3.7   2: RGB green \u2190 P1.1   3: RGB blue \u2190 P1.0   4: relay \u2190 P2.5   5: buzzer \u2190 P1.0   (SST column).' + NOT51,
+  rgb: 'RGB LED: red \u2190 P3.7, green \u2190 P1.1, blue \u2190 P1.0 through PERI_SW 1\u20133 (SST column).' + NOT51,
+  buzzer: 'Buzzer \u2190 P1.0 through PERI_SW 5 (SST column).' + NOT51,
+  'dip-analog': 'The SST89E516RD2 has no ADC: the pot and the LM35 have no 8051 pin (SST column: none).',
+  pot: 'The SST89E516RD2 has no ADC: the trimmer pot is not used with the 8051 kit.',
+  lm35: 'The SST89E516RD2 has no ADC: the LM35 is not used with the 8051 kit.',
+  USB2UART: 'USB to UART bridge (CP2102): TXD \u2192 P3.0 (RXD), RXD \u2190 P3.1 (TXD). On the 8051 kit this is the programming port: plug the lab PC\u2019s Type-B cable in here, then use SST EasyIAP.',
+  'U8 MAX232': 'RS-232 level shifter for the DB9 port (8051 UART: P3.1 TXD, P3.0 RXD).',
+  L_BANK: 'LED bank FRC connector: line n drives LED Ln. With the 8051 kit, run a ribbon from a PORT-0..3 header.',
+  MAT_KEY: 'Keypad FRC connector.' + NOT51,
+  LCD_DATA: 'LCD D0\u2013D7 FRC connector.' + NOT51,
+  LCD_CNTRL: 'LCD control FRC connector (RS, RW, EN).' + NOT51,
+  lcd: 'HD44780 16\u00d72 character LCD.' + NOT51,
+};
+
+const BASE_PARTS = PARTS.filter((p) => !p.onModule);
+const BASE_PARTS_51 = BASE_PARTS.map((p) => {
+  const info = INFO51[p.id ?? ''] ?? INFO51[p.name ?? ''];
+  return info ? { ...p, info } : p;
+});
+const PARTS_51 = [...BASE_PARTS_51, ...MODULE51_PARTS];
+const LABELS_51 = [...LABELS.filter((l) => !l.onModule), ...MODULE51_LABELS];
+const FRC_POINTS_51 = frcPoints(PARTS_51);
+
+export const partsFor = (v: BoardVariant): Part[] => (v === 'mcs51' ? PARTS_51 : PARTS);
+export const labelsFor = (v: BoardVariant): SilkLabel[] => (v === 'mcs51' ? LABELS_51 : LABELS);
+export const frcPointsFor = (v: BoardVariant): FrcPoints => (v === 'mcs51' ? FRC_POINTS_51 : FRC_POINTS);

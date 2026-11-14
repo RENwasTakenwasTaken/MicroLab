@@ -1,10 +1,12 @@
-// IDE toolbar. Mirrors MPLAB X (PIC) or Keil µVision (8051) command sets.
+// IDE toolbar: opens the lab computer (MPLAB for the PIC kit, Keil µVision + SST EasyIAP for the
+// 8051 kit) and drives the debugger on the program running on the bench board.
 
 import { useEffect } from 'react';
 import { useFrame, useLab } from '../app/store.ts';
-import { build, pause, reset, run, sim, step, toggleDebugSession } from '../app/sim.ts';
+import { pause, run, sim, step } from '../app/sim.ts';
 import { useBench } from '../app/bench.ts';
 import { buildOnly } from '../app/upload.ts';
+import { keilBuild } from '../app/upload51.ts';
 import { getExperiment } from '../experiments/experiments.ts';
 import { Icon } from '../ui/icons.tsx';
 
@@ -25,7 +27,6 @@ export function TopBar({ expId }: { expId: string }) {
   const building = useLab((s) => s.building);
   const programming = useLab((s) => s.programming);
   const programmed = useLab((s) => s.programmed);
-  const debugSession = useLab((s) => s.debugSession);
   const buildRes = useLab((s) => s.build);
   const stale = useLab((s) => s.buildStale);
   const speed = useLab((s) => s.speed);
@@ -41,9 +42,8 @@ export function TopBar({ expId }: { expId: string }) {
     const key = (e: KeyboardEvent) => {
       const lab = useLab.getState();
       const r = useFrame.getState().frame?.running;
-      if ((e.ctrlKey && e.key.toLowerCase() === 'b') || (is51 && e.key === 'F7')) { e.preventDefault(); if (is51) build(expId); else buildOnly(expId); }
-      else if (!is51 && e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'p') { e.preventDefault(); useBench.getState().setView('computer'); }
-      else if (is51 && e.ctrlKey && e.key === 'F5') { e.preventDefault(); toggleDebugSession(expId); }
+      if ((e.ctrlKey && e.key.toLowerCase() === 'b') || (is51 && e.key === 'F7')) { e.preventDefault(); if (is51) keilBuild(expId); else buildOnly(expId); }
+      else if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'p') { e.preventDefault(); useBench.getState().setView('computer'); }
       else if (e.key === 'F5' && !e.ctrlKey) { e.preventDefault(); if (lab.programmed) { if (r) pause(); else run(); } }
       else if (e.key === 'F10') { e.preventDefault(); if (lab.programmed) step('over'); }
       else if (e.key === 'F11' && e.ctrlKey) { e.preventDefault(); if (lab.programmed) step('out'); }
@@ -68,18 +68,12 @@ export function TopBar({ expId }: { expId: string }) {
       </div>
 
       <div className="tb-group">
-        <span className="tb-tool">{is51 ? 'µVision' : 'MPLAB X'}</span>
-        {is51 && <TBtn icon="hammer" label="Build" kbd="F7" onClick={() => build(expId)} disabled={building} />}
-        {is51 ? (
-          <TBtn icon="bug" label={debugSession ? 'Stop Debug' : 'Start Debug'} kbd="Ctrl+F5" onClick={() => toggleDebugSession(expId)} active={debugSession} primary={!debugSession && !!buildRes?.ok} />
-        ) : (
-          <TBtn icon="terminal" label="Lab Computer" kbd="Ctrl+Shift+P" onClick={() => useBench.getState().setView('computer')} primary={!programmed || stale} />
-        )}
+        <span className="tb-tool">{is51 ? 'Keil · EasyIAP' : 'MPLAB X'}</span>
+        <TBtn icon="terminal" label="Lab Computer" kbd="Ctrl+Shift+P" onClick={() => useBench.getState().setView('computer')} primary={!programmed || stale} />
         <span className="tb-sep" />
         {running
-          ? <TBtn icon="pause" label={is51 ? 'Pause' : 'Halt (debug)'} kbd="F5" onClick={pause} />
-          : <TBtn icon="play" label={is51 ? 'Run' : 'Resume'} kbd="F5" onClick={run} disabled={!canRun} />}
-        {is51 && <TBtn icon="reset" label="Reset" onClick={reset} disabled={!programmed} />}
+          ? <TBtn icon="pause" label="Halt (debug)" kbd="F5" onClick={pause} />
+          : <TBtn icon="play" label="Resume" kbd="F5" onClick={run} disabled={!canRun} />}
         <span className="tb-sep" />
         <button className="btn ghost icon" title="Step Into (F11)" disabled={!canRun || running} onClick={() => step('line')}><Icon name="stepInto" /></button>
         <button className="btn ghost icon" title="Step Over (F10)" disabled={!canRun || running} onClick={() => step('over')}><Icon name="stepOver" /></button>
