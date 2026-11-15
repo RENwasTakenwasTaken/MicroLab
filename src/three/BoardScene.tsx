@@ -12,7 +12,7 @@ import {
   Relimate, Resistor, Regulator, Screw, Sip, Socket, Standoff, Terminal, To92, UsbB, Zif,
 } from './parts.tsx';
 import {
-  Buzzer, DcMotor, DipSwitch, LcdModule, Led, Lm35, RgbLed, SlideSwitch, TactSwitch, TestLamp, Trimpot, Wire, useHover,
+  AdcPinHud, Buzzer, DcMotor, DipSwitch, LcdModule, Led, Lm35, RgbLed, SlideSwitch, TactSwitch, TestLamp, Trimpot, Wire, useHover,
 } from './interactive.tsx';
 import { silkscreenTexture } from './textures.ts';
 import { StaticBatch } from './perf.tsx';
@@ -29,6 +29,13 @@ const INDEXED: Record<BoardVariant, { p: Part; key: string }[]> = {
   pic18: partsFor('pic18').map((p, i) => ({ p, key: p.id ?? String(i) })),
   mcs51: partsFor('mcs51').map((p, i) => ({ p, key: p.id ?? `51-${i}` })),
 };
+/** Where the "analog pin is an output" HUD floats: over each PIC port's pin header (A, B, E carry AN pins). */
+const ADC_HUD_AT: Partial<Record<number, [number, number, number]>> = Object.fromEntries(
+  partsFor('pic18').flatMap((p) => {
+    const port = ['PORT-A pins', 'PORT-B pins', 'PORT-C pins', 'PORT-D pins', 'PORT-E pins'].indexOf(p.name ?? '');
+    return port < 0 ? [] : [[port, [p.x, MODULE.elevation + MODULE.t + 16, p.y] as [number, number, number]]];
+  }),
+);
 
 function PartView({ p }: { p: Part }) {
   const hover = useHover({ name: p.name ?? p.kind, info: p.info });
@@ -171,6 +178,7 @@ export function BoardScene() {
           <Wire points={[[134, 10, 73], [148, 12, 84], [162, 2, 80]]} color="#1f4fbf" />
         </StaticBatch>
         <Labels variant={variant} />
+        {variant === 'pic18' && <AdcPinHud at={ADC_HUD_AT} />}
       </group>
     </group>
   );

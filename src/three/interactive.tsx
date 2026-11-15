@@ -5,10 +5,11 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
 import { sim } from '../app/sim.ts';
-import { useLab } from '../app/store.ts';
+import { useLab, useFrame as useSimFrame } from '../app/store.ts';
+import { getExperiment } from '../experiments/experiments.ts';
 import type { PicBoardConfig } from '../sim/board/types.ts';
 import { BATCH, Box, Cyl, MAT, To92 } from './parts.tsx';
-import { glowTexture, LcdRenderer } from './textures.ts';
+import { glowTexture, LCD_CONTRAST, LcdRenderer } from './textures.ts';
 import { useBench } from '../app/bench.ts';
 import { Html } from '@react-three/drei';
 
@@ -21,10 +22,16 @@ const busy = () => !!useBench.getState().carrying;
 export interface HoverInfo { name: string; info?: string; live?: () => string }
 export const BoardCtx = createContext<{ hover(h: HoverInfo | null): void }>({ hover: () => {} });
 
-type Controls = { enabled: boolean } | null;
+type Controls = { enabled: boolean; enableZoom: boolean } | null;
 function useOrbitLock() {
   const controls = useThree((s) => s.controls) as unknown as Controls;
   return (locked: boolean) => { if (controls) controls.enabled = !locked; };
+}
+/** While the pointer is over a control that turns on the mouse wheel, the wheel must not also zoom the camera. */
+function useZoomLock() {
+  const controls = useThree((s) => s.controls) as unknown as Controls;
+  useEffect(() => () => { if (controls) controls.enableZoom = true; }, [controls]);
+  return (locked: boolean) => { if (controls) controls.enableZoom = !locked; };
 }
 
 /** Pointer handlers that show a tooltip for the wrapped component. */
@@ -239,6 +246,39 @@ export function RgbLed({ name, info }: { name?: string; info?: string }) {
 }
 
 // -------------------------------------------------------------------- LCD
+/** Opens the Output pane on the Simulator tab, where each LCD fault is explained with its fix. */
+function showSimMessages() {
+  useLab.getState().set({ bottomOpen: true, bottomTab: 'simlog' });
+  window.dispatchEvent(new Event('vlab:show-output')); // narrow layout: switch to the Output tab
+}
+
+/**
+ * Overlay above the LCD while the board is on and the LCD has ignored writes in this run (sent while
+ * it was busy, during its power-on reset, or with too short an EN pulse). Cleared by RESET / power-on.
+ */
+function LcdFaultHud() {
+  const key = useSimFrame((s) => {
+    const b = s.frame?.board;
+    if (b?.kind !== 'pic' || !b.power) return '';
+    const f = b.lcd.faults;
+    return f.busy + f.powerOn + f.pulse ? `${f.pulse},${f.powerOn},${f.busy}` : '';
+  });
+  if (!key) return null;
+  const [pulse, powerOn, busy] = key.split(',').map(Number);
+  const n = pulse + powerOn + busy;
+  return (
+    <Html center position={[0, 18, -21]} zIndexRange={[17, 0]} style={{ pointerEvents: 'none' }}>
+      <div className="lcd-hud">
+        <b>⚠ LCD ignored {n} write{n === 1 ? '' : 's'}</b>
+        {pulse > 0 && <span>Enable pulse too short</span>}
+        {powerOn > 0 && <span>Power-on delay not added</span>}
+        {busy > 0 && <span>Commands sent too quickly</span>}
+        <a onClick={showSimMessages} title="Open Simulator messages in the Output panel">How to fix this?</a>
+      </div>
+    </Html>
+  );
+}
+
 export function LcdModule({ name, info }: { name?: string; info?: string }) {
   const renderer = useMemo(() => new LcdRenderer(), []);
   const backlight = useRef<THREE.MeshStandardMaterial>(null);
@@ -270,7 +310,55 @@ export function LcdModule({ name, info }: { name?: string; info?: string }) {
         <planeGeometry args={[66, 17]} />
         <meshStandardMaterial ref={backlight} map={renderer.texture} emissiveMap={renderer.texture} emissive="#ffffff" emissiveIntensity={0.55} roughness={0.25} metalness={0} />
       </mesh>
+      <LcdFaultHud />
     </group>
+  );
+}
+
+/** Red HUD above the VLCD preset when the board is on and its setting makes the LCD unreadable (experiments that use the LCD). */
+function ContrastHud() {
+  const lcdExp = useLab((s) => s.route.page === 'exp' && getExperiment(s.route.id)?.board?.cables?.LCD_DATA != null);
+  const state = useSimFrame((s) => {
+    const b = s.frame?.board;
+    if (b?.kind !== 'pic' || !b.power) return null;
+    return b.lcdContrast < LCD_CONTRAST.low ? 'low' : b.lcdContrast > LCD_CONTRAST.high ? 'high' : null;
+  });
+  if (!lcdExp || !state) return null;
+  return (
+    <Html center position={[0, 15, 0]} zIndexRange={[17, 0]} style={{ pointerEvents: 'none' }}>
+      <div className="contrast-hud">
+        <b>Contrast too {state}</b>
+        <span>{state === 'low' ? 'Turn VLCD up: drag right or scroll up' : 'Turn VLCD down: drag left or scroll down'}</span>
+      </div>
+    </Html>
+  );
+}
+
+/**
+ * Red HUD above a port header while the program converts an analog channel whose pin it left as an
+ * output (TRIS bit = 0): the ADC then quietly reads the output driver's 0 V / 5 V instead of the sensor.
+ * `at` gives the HUD position for each port (A..E = 0..4) in board coordinates.
+ */
+export function AdcPinHud({ at }: { at: Partial<Record<number, [number, number, number]>> }) {
+  const key = useSimFrame((s) => {
+    const b = s.frame?.board;
+    const o = b?.kind === 'pic' ? b.adcOutput : null;
+    return o ? `${o.ch},${o.port},${o.bit},${o.volts}` : '';
+  });
+  const a = useLab((s) => (s.boardCfg as PicBoardConfig).assumptions);
+  if (!key) return null;
+  const [ch, port, bit, volts] = key.split(',').map(Number);
+  const pos = at[port];
+  if (!pos) return null;
+  const source = ch === a?.lm35Channel ? 'LM35' : ch === a?.potChannel ? 'pot' : 'analog input';
+  return (
+    <Html center position={pos} zIndexRange={[17, 0]} style={{ pointerEvents: 'none' }}>
+      <div className="lcd-hud adc-hud">
+        <b>⚠ AN{ch} (R{'ABCDE'[port]}{bit}) is an output</b>
+        <span>The ADC reads the pin driver's {volts} V, not the {source}</span>
+        <a onClick={showSimMessages} title="Open Simulator messages in the Output panel">How to fix this?</a>
+      </div>
+    </Html>
   );
 }
 
@@ -279,7 +367,7 @@ export function Trimpot({ input, name, info }: { input?: 'pot' | 'contrast'; nam
   const rotor = useRef<THREE.Group>(null);
   const lock = useOrbitLock();
   const drag = useRef<{ x: number; v: number } | null>(null);
-  const valueRef = useRef(input === 'contrast' ? 0.62 : 0.5);
+  const valueRef = useRef(input === 'contrast' ? LCD_CONTRAST.ideal : 0.5);
   const hover = useHover({
     name: name ?? 'Trimmer', info,
     live: () => input === 'pot' ? `${(valueRef.current * 5).toFixed(2)} V` : `contrast ${(valueRef.current * 100).toFixed(0)} %`,
@@ -302,8 +390,11 @@ export function Trimpot({ input, name, info }: { input?: 'pot' | 'contrast'; nam
     window.addEventListener('pointerup', up);
     return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
   });
+  const zoomLock = useZoomLock();
   return (
-    <group {...hover}
+    <group
+      onPointerOver={(e) => { hover.onPointerOver(e); zoomLock(true); }}
+      onPointerOut={() => { hover.onPointerOut(); zoomLock(false); }}
       onPointerDown={(e) => { if (busy()) return; e.stopPropagation(); lock(true); drag.current = { x: e.clientX, v: valueRef.current }; }}
       onWheel={(e) => { e.stopPropagation(); setValue(valueRef.current - Math.sign(e.deltaY) * 0.03); }}>
       <Box p={[0, 2.4, 0]} s={[7, 4.8, 7]} m={MAT.blue} batch />
@@ -311,6 +402,7 @@ export function Trimpot({ input, name, info }: { input?: 'pot' | 'contrast'; nam
         <Cyl p={[0, 0.5, 0]} r={2.6} h={1} m={MAT.white} />
         <Box p={[0, 1.05, 0]} s={[4, 0.15, 0.8]} m={MAT.cavity} castShadow={false} />
       </group>
+      {input === 'contrast' && <ContrastHud />}
     </group>
   );
 }

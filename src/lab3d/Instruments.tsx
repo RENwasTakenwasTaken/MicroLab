@@ -4,10 +4,13 @@
 
 import { useMemo, useRef, type ReactNode } from 'react';
 import { useFrame, type ThreeEvent } from '@react-three/fiber';
+import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { analyzer } from '../app/analyzer.ts';
-import { DMM_MODES, SDIV_STEPS, VDIV_STEPS, useBench, type ScopeCoupling } from '../app/bench.ts';
+import { DMM_MODES, SDIV_STEPS, VDIV_STEPS, useBench, type DmmSettings, type ScopeCoupling } from '../app/bench.ts';
 import { sim } from '../app/sim.ts';
+import { useLab } from '../app/store.ts';
+import { getExperiment } from '../experiments/experiments.ts';
 import { useHover } from '../three/interactive.tsx';
 import { CanvasScreen, drawDmm, drawGen, drawScope, type ScopeView } from './screens.ts';
 import { coupledTrace, genValue, nodeDc, nodeFreq, plugNode, traceStats, triggerTime } from './signals.ts';
@@ -227,6 +230,37 @@ function fmtAuto(v: number, unitBase: string): [string, string] {
   return [v.toFixed(a >= 10 ? 2 : 3), unitBase];
 }
 
+const DMM_MODE_NAME: Record<DmmSettings['mode'], string> = { V: 'V', OHM: 'Ω', HZ: 'Hz', UA: 'µA', MA: 'mA', A: 'A', TEMP: 'TEMP' };
+
+/**
+ * Why the meter cannot read the experiment's DC voltage, or null: the dial is off the volts position,
+ * or volts are on AC (a steady DC level then reads 0.000 V). Only for experiments with a DMM step.
+ */
+export function useDmmProblem(): { title: string; fix: string } | null {
+  const dmmExp = useLab((s) => s.route.page === 'exp' && !!getExperiment(s.route.id)?.board?.dmm);
+  const dmm = useBench((s) => s.dmm);
+  const ac = useBench((s) => s.dmmAc);
+  if (!dmmExp || !dmm.on) return null;
+  if (dmm.mode !== 'V') return { title: `Dial on ${DMM_MODE_NAME[dmm.mode]}`, fix: 'Turn the dial to V≂: click it (right-click goes back)' };
+  if (ac) return { title: 'DMM on AC volts', fix: 'A DC voltage reads 0.000 V: press SELECT for DC' };
+  return null;
+}
+
+/** Red HUD over the meter's display once a lead is on the board and the setting cannot show the DC voltage. */
+function DmmHud() {
+  const problem = useDmmProblem();
+  const measuring = useBench((s) => s.plugs['dmm:v']?.attachedTo != null);
+  if (!problem || !measuring) return null;
+  return (
+    <Html center position={[0, 30, -82]} zIndexRange={[17, 0]} style={{ pointerEvents: 'none' }}>
+      <div className="contrast-hud dmm-hud">
+        <b>{problem.title}</b>
+        <span>{problem.fix}</span>
+      </div>
+    </Html>
+  );
+}
+
 export function Multimeter() {
   const lcd = useMemo(() => new CanvasScreen(400, 220), []);
   const dial = useRef<THREE.Group>(null);
@@ -288,6 +322,7 @@ export function Multimeter() {
         </group>
         <mesh position={[0, 20.1, 0]} rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[92, 192]} /><meshStandardMaterial map={face} roughness={0.65} /></mesh>
         <mesh position={[0, 20.3, -55]} rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[64, 36]} /><meshBasicMaterial map={lcd.texture} toneMapped={false} /></mesh>
+        <DmmHud />
         <Button pos={[-31, 21.5, -26]} size={[11, 6]} color="#d6342a" name="POWER" rotX={0} onPress={() => setDmm({ on: !useBench.getState().dmm.on })} />
         <Button pos={[-11, 21.5, -26]} size={[11, 6]} color="#2a2a2a" name="SELECT" info="AC / DC in volts mode" rotX={0} onPress={() => useBench.setState({ dmmAc: !useBench.getState().dmmAc })} />
         <Button pos={[10, 21.5, -26]} size={[11, 6]} color="#2a2a2a" name="RANGE" rotX={0} />

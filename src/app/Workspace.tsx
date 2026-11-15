@@ -132,6 +132,12 @@ export function Workspace({ expId }: { expId: string }) {
   const [mobileTab, setMobileTab] = useState<'code' | 'board' | 'output' | 'debug' | 'lab'>('board');
   const coding = useBench((s) => s.view === 'computer');
   useEffect(() => { openExperiment(expId); }, [expId]);
+  // "How to fix this?" on the 3D LCD's fault overlay asks for the Output pane (a tab on narrow screens)
+  useEffect(() => {
+    const show = () => setMobileTab('output');
+    window.addEventListener('vlab:show-output', show);
+    return () => window.removeEventListener('vlab:show-output', show);
+  }, []);
   // the bench instruments read the transition log, so it runs even while the output pane is hidden
   useEffect(() => { sim.send({ type: 'analyzer', enabled: true }); }, [expId]);
   // the monitor's coding view gets the whole stage; the output pane comes back on leaving it

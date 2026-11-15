@@ -15,7 +15,7 @@ import { Icon } from '../ui/icons.tsx';
 import { Room } from './Room.tsx';
 import { Mains } from './Mains.tsx';
 import { Computer, screenFrame } from './Computer.tsx';
-import { Instruments } from './Instruments.tsx';
+import { Instruments, useDmmProblem } from './Instruments.tsx';
 import { BenchCables, CarryController, SocketTargets, carryPos } from './Cables.tsx';
 import { CodingOverlay, useScreenRect } from './CodingOverlay.tsx';
 import { DESK_Y, DMM, SCOPE, SOCKET, rotateY } from './world.ts';
@@ -381,7 +381,14 @@ function CouplingWarning({ channels }: { channels: string[] }) {
   );
 }
 
-const DIP_NAME: Record<string, string> = { pb: 'Push-button DIP', periph: 'PERI_SW', dcm: 'DCM_SW', analog: 'ANALOG INP' };
+/** The DMM step's counterpart of the HUD over the meter: its setting cannot show the DC voltage. */
+function DmmWarning() {
+  const problem = useDmmProblem();
+  if (!problem) return null;
+  return <div className="wf-warn">{problem.title}. {problem.fix}.</div>;
+}
+
+const DIP_NAME: Record<string, string> ={ pb: 'Push-button DIP', periph: 'PERI_SW', dcm: 'DCM_SW', analog: 'ANALOG INP' };
 
 function WorkflowGuide({ expId, onPc }: { expId: string; onPc: boolean }) {
   const [open, setOpen] = useState(true);
@@ -462,6 +469,7 @@ function WorkflowGuide({ expId, onPc }: { expId: string; onPc: boolean }) {
             <ul className="wf-sub">
               {dmm.map((p) => <li key={p.plug} className={p.ok ? 'ok' : ''}>{p.label}</li>)}
             </ul>
+            <DmmWarning />
           </Step>
         )}
         {is51 ? (

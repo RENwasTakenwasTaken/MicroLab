@@ -29,3 +29,16 @@
 .board-label.on { color: var(--accent); border-color: rgba(63, 182, 139, 0.5); }
 .board-label.warn { color: var(--amber); border-color: rgba(232, 176, 74, 0.45); }
 .board-label b { font-weight: 600; color: var(--fg-0); }
+/* red alerts floating over the LCD (ignored writes) and the VLCD preset (contrast out of range) */
+.lcd-hud, .contrast-hud {
+  display: flex; flex-direction: column; gap: 1px; white-space: nowrap;
+  font: 500 10.5px var(--sans); color: #ffd9d6; padding: 4px 8px; border-radius: 6px;
+  background: rgba(58, 14, 14, 0.92); border: 1px solid rgba(240, 90, 80, 0.75);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+}
+.lcd-hud b, .contrast-hud b { font-weight: 700; font-size: 11px; color: #ff8a80; }
+.lcd-hud a { pointer-events: auto; cursor: pointer; margin-top: 2px; color: #fff; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+.lcd-hud a:hover { color: #ffd9d6; }
+.contrast-hud { animation: hud-pulse 1.6s ease-in-out infinite; }
+@keyframes hud-pulse { 50% { border-color: rgba(240, 90, 80, 0.3); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45), 0 0 0 3px rgba(240, 90, 80, 0.18); } }
+@media (prefers-reduced-motion: reduce) { .contrast-hud { animation: none; } }

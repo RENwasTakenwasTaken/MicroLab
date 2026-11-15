@@ -60,6 +60,13 @@ function Programmer() {
   );
 }
 
+/** A message's "How to fix:" part (LCD timing faults) stands out. */
+function fixed(msg: string) {
+  const i = msg.indexOf('How to fix:');
+  if (i < 0) return msg;
+  return <>{msg.slice(0, i)}<b className="c-fix">How to fix:</b>{msg.slice(i + 11)}</>;
+}
+
 function SimLog() {
   const log = useLab((s) => s.simLog);
   const ref = useRef<HTMLDivElement>(null);
@@ -69,7 +76,7 @@ function SimLog() {
     <div className="console" ref={ref}>
       {log.map((l, i) => (
         <div key={i} className={l.level === 'error' ? 'c-err' : l.level === 'warn' ? 'c-warn' : ''}>
-          <span className="c-dim">[{l.t.toFixed(6)} s]</span> {l.msg}
+          <span className="c-dim">[{l.t.toFixed(6)} s]</span> {fixed(l.msg)}
         </div>
       ))}
     </div>

@@ -68,6 +68,8 @@ export class PicBoard implements PinBus, SimBoard {
   relayOn = false;
   relaySwitches = 0;
   private lastE = 0;
+  /** when EN last went high (the LCD checks the enable pulse width) */
+  private eRise = -Infinity;
   private logs: { level: LogLevel; msg: string; t: number }[] = [];
   private serial: number[] = [];
   private warned = new Set<string>();
@@ -84,6 +86,7 @@ export class PicBoard implements PinBus, SimBoard {
     this.pinMonitor.reset(0);
     this.lcd.reset();
     this.lastE = 0;
+    this.eRise = -Infinity;
   }
 
   private now(cycle = this.mcu?.cycles ?? 0) {
@@ -153,6 +156,7 @@ export class PicBoard implements PinBus, SimBoard {
     const { cables, assumptions: a } = this.cfg;
     if (cables.LCD_CTRL === port && cables.LCD_DATA !== null) {
       const e = this.outLevel(port, a.lcdEn) ?? 0;
+      if (!this.lastE && e) this.eRise = t;
       if (this.lastE && !e) {
         const rs = this.outLevel(port, a.lcdRs) ?? 0;
         const rw = this.outLevel(port, a.lcdRw) ?? 0;
@@ -162,7 +166,7 @@ export class PicBoard implements PinBus, SimBoard {
         const needed = this.lcd.dl8 ? 0xff : 0xf0;
         if (!rw && (m.driven[dp] & needed) !== needed)
           this.warnOnce('lcd-data-tris', `LCD write while some PORT${'ABCDE'[dp]} data pins are inputs (TRIS=1). Set TRIS${'ABCDE'[dp]} = 0x00.`);
-        this.lcd.strobe(rs, rw, bus, t);
+        this.lcd.strobe(rs, rw, bus, t, t - this.eRise);
       }
       this.lastE = e;
     }
@@ -194,7 +198,7 @@ export class PicBoard implements PinBus, SimBoard {
         if (ev.pressed) this.pressed.add(ev.id); else this.pressed.delete(ev.id);
         if (ev.id === 'reset') {
           this.resetHeld = ev.pressed;
-          if (ev.pressed) { this.mcu.softReset(); this.log('info', 'MCLR reset (RESET button).'); }
+          if (ev.pressed) { this.mcu.softReset(); this.lcd.settle(); this.log('info', 'MCLR reset (RESET button).'); }
         }
         break;
       case 'dip': this.cfg.dips[ev.bank][ev.index] = ev.on; break;
@@ -208,7 +212,7 @@ export class PicBoard implements PinBus, SimBoard {
         break;
       case 'power':
         this.power = ev.on;
-        if (ev.on) { this.mcu.reset(); this.lcd.reset(); this.lastE = 0; this.motorRpm = 0; }
+        if (ev.on) { this.mcu.reset(); this.lcd.powerUp(this.now()); this.lastE = 0; this.eRise = -Infinity; this.motorRpm = 0; }
         break;
       default: break;
     }
@@ -266,6 +270,7 @@ export class PicBoard implements PinBus, SimBoard {
       inputs,
       dips: structuredClone(dips),
       cables: { ...cables },
+      adcOutput: this.power && this.mcu?.adcOutput ? { ...this.mcu.adcOutput } : null,
     };
   }
 

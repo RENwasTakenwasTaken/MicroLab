@@ -139,6 +139,12 @@ export function glowTexture() {
 // ------------------------------------------------------------------ LCD
 export const LCD_CANVAS = { w: 760, h: 200 };
 
+/**
+ * VLCD contrast preset (0..1): below `low` the characters fade into the background, above `high`
+ * the unlit dots darken until every cell looks like a block. `ideal` is the board's default.
+ */
+export const LCD_CONTRAST = { low: 0.28, high: 0.9, ideal: 0.62 };
+
 export class LcdRenderer {
   canvas: HTMLCanvasElement;
   texture: THREE.CanvasTexture;
@@ -171,8 +177,8 @@ export class LcdRenderer {
     const cw = 5 * pitch, ch = 8 * pitch, colGap = 5.6, rowGap = 16;
     const x0 = (w - (16 * cw + 15 * colGap)) / 2;
     const y0 = (h - (2 * ch + rowGap)) / 2;
-    // contrast: ~0.6 ideal. Low -> faint pixels, high -> "off" pixels darken too
-    const on = power ? Math.min(1, Math.max(0, (contrast - 0.15) / 0.45)) : 0;
+    // contrast: ~0.6 ideal. Low -> lit dots fade to the background (gone at 0.2), high -> unlit dots darken too
+    const on = power ? Math.min(1, Math.max(0, (contrast - 0.2) / 0.4)) : 0;
     const off = power ? Math.max(0, (contrast - 0.7) / 0.3) * 0.75 : 0;
     const px = (a: number) => `rgba(28,40,12,${a.toFixed(3)})`;
     for (let r = 0; r < 2; r++) {
@@ -194,7 +200,7 @@ export class LcdRenderer {
         for (let y = 0; y < 8; y++) {
           for (let x = 0; x < 5; x++) {
             const lit = blockAll ? true : (rows[y] >> (4 - x)) & 1;
-            const a = blockAll ? Math.max(0.05, Math.min(0.85, (contrast - 0.35) * 2.2)) : lit ? 0.12 + on * 0.8 : 0.06 + off;
+            const a = blockAll ? Math.max(0.05, Math.min(0.85, (contrast - 0.35) * 2.2)) : lit ? 0.06 + on * 0.86 : 0.06 + off;
             g.fillStyle = px(a);
             g.fillRect(cx + x * pitch, cy + y * pitch, dot, dot);
           }

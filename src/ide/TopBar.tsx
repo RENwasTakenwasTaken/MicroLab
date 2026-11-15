@@ -14,6 +14,11 @@ import { Icon } from '../ui/icons.tsx';
 const fmtTime = (s: number) => (s < 1 ? `${(s * 1000).toFixed(1)} ms` : s < 60 ? `${s.toFixed(3)} s` : `${Math.floor(s / 60)}m ${(s % 60).toFixed(1)}s`);
 const fmtHz = (hz: number) => (hz >= 1e6 ? `${(hz / 1e6).toFixed(hz % 1e6 ? 3 : 0)} MHz` : `${(hz / 1e3).toFixed(1)} kHz`);
 
+/** Asks before the Home button leaves the experiment: the code is kept, the bench set-up is not. */
+const confirmLeave = (no: number, keilSim: boolean) => confirm(keilSim
+  ? `Leave Expt ${no} and go back to all experiments?\n\nYour code is saved.`
+  : `Leave Expt ${no} and go back to all experiments?\n\nYour code is saved, but the bench starts over when you come back: cables unplugged, board switched off, and the program has to be uploaded again.`);
+
 function TBtn({ icon, label, kbd, onClick, disabled, primary, active }: { icon: string; label: string; kbd?: string; onClick(): void; disabled?: boolean; primary?: boolean; active?: boolean }) {
   return (
     <button className={`btn ${primary ? 'primary' : 'ghost'} ${active ? 'active' : ''}`} onClick={onClick} disabled={disabled} title={kbd ? `${label} (${kbd})` : label}>
@@ -64,7 +69,7 @@ export function TopBar({ expId }: { expId: string }) {
   return (
     <div className="topbar">
       <div className="tb-group">
-        <button className="btn ghost icon" title="All experiments" onClick={() => { location.hash = '#/'; }}><Icon name="home" /></button>
+        <button className="btn ghost icon" title="All experiments" onClick={() => { if (confirmLeave(exp.no, keilSim)) location.hash = '#/'; }}><Icon name="home" /></button>
         <div className="tb-title">
           <span className="tb-exp">Expt {exp.no}</span>
           <span className="tb-name">{exp.title}</span>

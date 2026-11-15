@@ -75,9 +75,13 @@ export function openExperiment(id: string) {
   });
   analyzer.clear();
   sim.init(arch, cfg);
+  if (exp.board?.lcdContrast !== undefined) sim.input({ kind: 'contrast', value: exp.board.lcdContrast });
   // both kits sit on the 3D bench: cables unplugged, power off (the Keil-style simulator has no bench: always powered)
-  if (exp.simulator !== 'keil') resetBench();
-  else useBench.setState({ view: 'lab', carrying: null, snap: null });
+  if (exp.simulator !== 'keil') {
+    resetBench();
+    // the meter starts on the volts dial, on AC where the experiment wants that setup fault
+    useBench.setState({ dmm: { on: true, mode: 'V' }, dmmAc: !!exp.board?.dmmAc });
+  } else useBench.setState({ view: 'lab', carrying: null, snap: null });
   sim.send({ type: 'analyzer', enabled: true }); // the bench oscilloscope needs pin transitions
   sim.send({ type: 'speed', value: useLab.getState().speed });
   sim.send({ type: 'breakpoints', lines: useLab.getState().breakpoints[id] ?? [] });

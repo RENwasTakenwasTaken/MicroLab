@@ -86,6 +86,8 @@ export class Pic18 implements McuCore {
   adcDoneAt = -1;
   /** AN channels already warned about being sampled while their pin is an output */
   adcTrisWarned = 0;
+  /** the last conversion sampled a pin left as an output: channel, pin and the level it read (null: input) */
+  adcOutput: { ch: number; port: number; bit: number; volts: number } | null = null;
   txBusyUntil = -1;
   txShift = -1;
   txBuffer = -1;
@@ -159,7 +161,7 @@ export class Pic18 implements McuCore {
     this.tmr1 = 0; this.t1pre = 0; this.tmr3 = 0; this.t3pre = 0;
     this.tmr2 = 0; this.t2pre = 0; this.t2post = 0;
     for (const c of this.ccp) { c.out = 0; c.fallAt = -1; c.captureCount = 0; }
-    this.adcDoneAt = -1; this.adcTrisWarned = 0; this.txBusyUntil = -1; this.txShift = -1; this.txBuffer = -1;
+    this.adcDoneAt = -1; this.adcTrisWarned = 0; this.adcOutput = null; this.txBusyUntil = -1; this.txShift = -1; this.txBuffer = -1;
     this.rxFifo = []; this.rxNextAt = -1; this.nextEvent = Infinity; this.wdtSeconds = 0;
     this.irqBlock = 0;
     this.recalcClock();
@@ -602,11 +604,13 @@ export class Pic18 implements McuCore {
         // digital input buffer) and, being far stiffer than the pot / LM35, sets the pin voltage.
         // The ADC samples that pin voltage, i.e. the LAT level.
         v = (this.level[p] >> b) & 1 ? 5.0 : 0;
+        this.adcOutput = { ch, port: p, bit: b, volts: v };
         if (!(this.adcTrisWarned & (1 << ch))) {
           this.adcTrisWarned |= 1 << ch;
-          this.bus.log('warn', `ADC channel AN${ch} (R${'ABCDE'[p]}${b}) is an output (TRIS${'ABCDE'[p]} bit ${b} = 0): the output driver forces the pin to ${v ? '5 V' : '0 V'}, so the ADC reads that instead of the analog source. Set TRIS${'ABCDE'[p]} bit ${b} = 1 for an analog input.`);
+          const P = 'ABCDE'[p];
+          this.bus.log('warn', `ADC channel AN${ch} (R${P}${b}) is an output (TRIS${P} bit ${b} = 0): the output driver forces the pin to ${v ? '5 V' : '0 V'}, so the ADC reads that instead of the analog source, with no error. How to fix: make the pin an input, TRIS${P} bit ${b} = 1, e.g. TRIS${P}bits.R${P}${b} = 1; (check that no later TRIS${P} = 0x00 undoes it).`);
         }
-      } else v = this.bus.analogVoltage(p, b);
+      } else { v = this.bus.analogVoltage(p, b); this.adcOutput = null; }
       if (!(this.analogMask(p) & (1 << b)))
         this.bus.log('warn', `ADC channel AN${ch} is not configured as analog in ADCON1 (PCFG). Reading may be wrong on real hardware.`);
     }

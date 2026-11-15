@@ -136,40 +136,106 @@ const lcdText = (snap) => snap.lcd.rows.map((r) => r.map((c) => (c < 0 ? ' ' : c
   check('display on, cursor off', f.lcd.displayOn && !f.lcd.cursor);
   const warns = board.drainLogs().filter((l) => l.level === 'warn');
   check('no LCD timing warnings', warns.length === 0, warns[0]?.msg ?? '');
+  check('no LCD faults', Object.values(f.lcd.faults).every((n) => n === 0), JSON.stringify(f.lcd.faults));
+  // the reference program also survives a power cycle (its ~20 ms start-up delay covers the LCD's 10 ms reset)
+  board.input({ kind: 'power', on: false }); board.input({ kind: 'power', on: true });
+  runFor(0.3);
+  const f2 = frame();
+  check('after a power cycle: same text, no LCD faults', lcdText(f2)[0].startsWith('  PICT  PUNE  ') && Object.values(f2.lcd.faults).every((n) => n === 0), JSON.stringify(f2.lcd.faults));
+}
+
+// LCD timing faults: variants of the Expt 5 reference program, each missing one delay
+async function lcdVariant(edit) {
+  const src = edit(code('exp5_pic_lcd.c'));
+  if (src === code('exp5_pic_lcd.c')) throw new Error('LCD variant: edit did not apply');
+  const r = await compilePic18(src);
+  if (!r.ok) { console.log(r.log); throw new Error('LCD variant failed to compile'); }
+  const rig = picRig((c) => { c.cables.LBANK = null; c.cables.LCD_DATA = 3; c.cables.LCD_CTRL = 4; });
+  rig.flash(r.hex);
+  return rig;
+}
+const lcdWarn = (board, re) => board.drainLogs().find((l) => l.level === 'warn' && re.test(l.msg));
+{
+  console.log('Experiment 5 — LCD timing: no delay after a command');
+  const { board, runFor, frame } = await lcdVariant((s) => s.replace('delay(16);', ';'));
+  runFor(0.3);
+  const f = frame(), t = lcdText(f);
+  check('writes right after Clear display are ignored (start of line 1 missing)', f.lcd.faults.busy > 0 && !t[0].startsWith('  PICT') && t[1].startsWith('EP Lab - Expt 5'), `${f.lcd.faults.busy} ignored · ${JSON.stringify(t)}`);
+  const w = lcdWarn(board, /LCD ignored/);
+  check('message names the Clear display command and the fix delay(16)', !!w && /Clear display/.test(w.msg) && /1\.52 ms/.test(w.msg) && /delay\(16\)/.test(w.msg), w?.msg ?? 'no warning');
+}
+{
+  console.log('Experiment 5 — LCD timing: no power-on delay');
+  const { board, runFor, frame } = await lcdVariant((s) => s.replace('delay(160);', ';'));
+  runFor(0.3);
+  check('works when started by a reset (the LCD has been powered for a while)', lcdText(frame())[0].startsWith('  PICT  PUNE  '));
+  board.drainLogs();
+  board.input({ kind: 'power', on: false }); board.input({ kind: 'power', on: true });
+  runFor(0.3);
+  let f = frame();
+  check('after switching the board on: the LCD ignores the init commands, display stays off', f.lcd.faults.powerOn > 0 && !f.lcd.displayOn, `${f.lcd.faults.powerOn} ignored`);
+  const w = lcdWarn(board, /LCD ignored/);
+  check('message explains the power-on reset and the fix delay(160)', !!w && /after power-on/.test(w.msg) && /delay\(160\)/.test(w.msg), w?.msg ?? 'no warning');
+  board.input({ kind: 'button', id: 'reset', pressed: true }); board.input({ kind: 'button', id: 'reset', pressed: false });
+  runFor(0.3);
+  f = frame();
+  check('pressing RESET hides the bug: text shown, fault count cleared', lcdText(f)[0].startsWith('  PICT  PUNE  ') && f.lcd.faults.powerOn === 0);
+}
+{
+  console.log('Experiment 5 — LCD timing: EN = 1; EN = 0; back to back');
+  const { board, runFor, frame } = await lcdVariant((s) => s.replace(/EN = 1;\s*delay\(1\);\s*EN = 0;/g, 'EN = 1;\n\tEN = 0;'));
+  runFor(0.3);
+  const f = frame();
+  check('every write ignored: LCD never initialised', f.lcd.faults.pulse > 0 && !f.lcd.initialized, `${f.lcd.faults.pulse} ignored`);
+  const w = lcdWarn(board, /LCD ignored/);
+  check('message gives the pulse width and the 230 ns minimum', !!w && /EN was high for only \d+ ns/.test(w.msg) && /230 ns/.test(w.msg), w?.msg ?? 'no warning');
 }
 
 // ---------------------------------------------------------------- exp 6
+// the lab's program: LCD control on PORT-E (RE0-RE2), LM35 on AN1, line 1 = "Result:" + the 4-digit ADC result
+const exp6Rig = () => picRig((c) => {
+  c.cables.LBANK = null; c.cables.LCD_DATA = 3; c.cables.LCD_CTRL = 4; c.dips.analog = [false, true];
+});
+/** ADC result shown on line 1 ("Result:0064"), or NaN */
+const exp6Result = (snap) => { const m = /^Result:(\d{4})/.exec(lcdText(snap)[0]); return m ? Number(m[1]) : NaN; };
+/** what the 10-bit ADC gives for the LM35 at `c` degrees (10 mV / °C, Vref = 5 V) */
+const lm35Code = (c) => Math.floor((c * 0.01 / 5) * 1024);
 {
-  console.log('Experiment 6 — LM35 temperature on LCD');
+  console.log('Experiment 6 — LM35 on AN1, ADC result on the LCD');
   const r = await build('exp6_pic_temp.c');
-  const { board, mcu, runFor, frame, flash } = picRig((c) => {
-    c.cables.LBANK = null; c.cables.LCD_DATA = 3; c.cables.LCD_CTRL = 4; c.dips.analog = [false, true];
-  });
+  const { board, runFor, frame, flash } = exp6Rig();
   flash(r.hex);
   board.input({ kind: 'temperature', celsius: 31.4 });
   runFor(1.2);
-  let t = lcdText(frame());
-  check('shows ~31.4 °C', /31\.[2-5]°C/.test(t[1]), JSON.stringify(t));
+  let f = frame();
+  check(`shows "Result:" + the ADC result for 31.4 °C (${lm35Code(31.4)})`, Math.abs(exp6Result(f) - lm35Code(31.4)) <= 1, JSON.stringify(lcdText(f)));
+  check('display on, no LCD faults, no warnings', f.lcd.displayOn && Object.values(f.lcd.faults).every((n) => n === 0) && !board.drainLogs().some((l) => l.level === 'warn'), JSON.stringify(f.lcd.faults));
+  check('analog pin is an input: no ADC output HUD', f.adcOutput === null);
   board.input({ kind: 'temperature', celsius: 48 });
   runFor(1.2);
-  t = lcdText(frame());
-  check('tracks change to 48 °C', /4[78]\.\d°C/.test(t[1]), JSON.stringify(t[1]));
+  f = frame();
+  check(`tracks a change to 48 °C (${lm35Code(48)})`, Math.abs(exp6Result(f) - lm35Code(48)) <= 1, JSON.stringify(lcdText(f)[0]));
+  // the lab's program sends its first LCD command ~12.8 ms after start-up: past the LCD's 10 ms reset
+  board.input({ kind: 'power', on: false }); board.input({ kind: 'power', on: true });
+  runFor(1.2);
+  f = frame();
+  check('after a power cycle: same reading, no LCD faults', Math.abs(exp6Result(f) - lm35Code(48)) <= 1 && f.lcd.displayOn && Object.values(f.lcd.faults).every((n) => n === 0), `${JSON.stringify(lcdText(f)[0])} ${JSON.stringify(f.lcd.faults)}`);
 }
 {
-  console.log('Experiment 6 — RA1 left as an output (TRISA = 0x00)');
-  const src = code('exp6_pic_temp.c').replace('TRISA = 0x02;', 'TRISA = 0x00;');
+  console.log('Experiment 6 — RA1 left as an output (TRISAbits.RA1 = 0)');
+  const src = code('exp6_pic_temp.c').replace('TRISAbits.RA1 = 1;', 'TRISAbits.RA1 = 0;');
+  if (src === code('exp6_pic_temp.c')) throw new Error('exp6 variant: edit did not apply');
   const r = await compilePic18(src);
   if (!r.ok) { console.log(r.log); throw new Error('exp6 variant failed to compile'); }
-  const { board, runFor, frame, flash } = picRig((c) => {
-    c.cables.LBANK = null; c.cables.LCD_DATA = 3; c.cables.LCD_CTRL = 4; c.dips.analog = [false, true];
-  });
+  const { board, runFor, frame, flash } = exp6Rig();
   flash(r.hex);
   board.input({ kind: 'temperature', celsius: 31.4 });
   runFor(1.2);
-  const t = lcdText(frame());
-  check('ADC reads the driven 0 V, not the LM35', /000\.0°C/.test(t[1]), JSON.stringify(t[1]));
+  const f = frame();
+  check('ADC reads the driven 0 V, not the LM35', exp6Result(f) === 0, JSON.stringify(lcdText(f)[0]));
+  check('frame reports AN1 (RA1) read as an output at 0 V (HUD above PORT-A)', f.adcOutput?.ch === 1 && f.adcOutput.port === 0 && f.adcOutput.bit === 1 && f.adcOutput.volts === 0, JSON.stringify(f.adcOutput));
   const w = board.drainLogs().find((l) => /AN1 \(RA1\) is an output/.test(l.msg));
-  check('warns that the analog pin is an output', !!w, w?.msg ?? 'no warning');
+  check('warns that the analog pin is an output, with the fix', !!w && /How to fix:/.test(w.msg) && /TRISAbits\.RA1 = 1/.test(w.msg), w?.msg ?? 'no warning');
 }
 
 console.log(failures ? `\n${failures} check(s) FAILED` : '\nAll checks passed');

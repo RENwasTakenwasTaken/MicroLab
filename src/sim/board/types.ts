@@ -112,7 +112,11 @@ export interface PicBoardSnapshot {
   inputs: Record<string, boolean>;
   dips: PicBoardConfig['dips'];
   cables: PicBoardConfig['cables'];
+  /** the last A/D conversion sampled a pin left as an output (TRIS bit = 0): what it read instead */
+  adcOutput: AdcOutputPin | null;
 }
+
+export interface AdcOutputPin { ch: number; port: number; bit: number; volts: number }
 
 export interface Mcs51BoardSnapshot {
   kind: 'mcs51';

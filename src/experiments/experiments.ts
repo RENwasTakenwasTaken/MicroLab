@@ -59,6 +59,10 @@ export interface Experiment {
     motor?: boolean;
     /** final step: change the LM35 temperature in the Hardware tab while the program runs */
     tempTask?: boolean;
+    /** where the VLCD contrast preset starts (0..1) when it is not at the ideal setting */
+    lcdContrast?: number;
+    /** the DMM starts on AC volts (SELECT toggles AC / DC): a DC voltage then reads 0.000 V */
+    dmmAc?: boolean;
   };
   /** link to a setup video for the practical (shown on the lab sheet and in the setup guide when set) */
   video?: string;
@@ -288,6 +292,7 @@ export const EXPERIMENTS: Experiment[] = [
       'HD44780 commands: 0x38 function set, 0x0C display on, 0x06 entry mode, 0x01 clear, 0x80/0xC0 line address.',
       'Data is latched on the falling edge of EN; RS selects command (0) or data (1).',
       'Commands need 37 µs (clear/home 1.52 ms) before the next write.',
+      'Timing the LCD enforces: after power-on it resets itself for about 10 ms and ignores writes (the datasheet asks for a wait of more than 15 ms); a write that arrives while it is still busy is ignored; EN must stay high for at least 230 ns (one instruction at 48 MHz is only 83 ns).',
       'ADCON1 = 0x0F is required so that RE0–RE2 work as digital I/O.',
     ],
     hardware: ['EXCEL PIC V1.0 module', 'LCD/GLCD display section with JHD162A 16×2 LCD', 'VLCD contrast preset'],
@@ -297,17 +302,19 @@ export const EXPERIMENTS: Experiment[] = [
       { signal: 'RW', mcuPin: 'RE1', board: 'FRC: PORT-E → LCD_CNTRL (line 2)', verified: true },
       { signal: 'EN', mcuPin: 'RE2', board: 'FRC: PORT-E → LCD_CNTRL (line 3)', verified: true },
     ],
-    board: { cables: { LBANK: null, KEY: null, LCD_DATA: 3, LCD_CTRL: 4 } },
+    // the VLCD preset starts turned almost fully down, as a kit often is: the text stays invisible
+    // until the student adjusts it (a red HUD over the preset says so)
+    board: { cables: { LBANK: null, KEY: null, LCD_DATA: 3, LCD_CTRL: 4 }, lcdContrast: 0.06 },
     starter: exp5,
     expected: ['Line 1: "  PICT  PUNE"', 'Line 2: "EP Lab - Expt 5"'],
     measurements: [{ kind: 'lcd', label: 'LCD contents' }],
-    procedure: PIC_PROCEDURE,
+    procedure: [...PIC_PROCEDURE, 'If the LCD looks blank (or every cell is a dark block), adjust the VLCD contrast preset beside the LCD until the characters are clear.'],
   },
   {
     id: 'exp6', no: 6, co: 'CO1', arch: 'pic18', mcu: 'PIC18F4550', status: 'ready',
     title: 'Temperature sensor with real-time LCD display',
     objective: 'Interface and program a temperature sensor with the PIC18F4550 to display real-time readings on an LCD: understand the working of an A/D converter, study the on-chip ADC of the PIC and interface an analog input to it.',
-    problem: 'Read the LM35 on AN1 (RA1) with the 10-bit on-chip ADC, convert to °C and display it on the LCD every 500 ms. The lab writeup\'s variant reads a 0–5 V input (the trimmer pot on AN2) and shows the result in BCD / voltage form on the LCD.',
+    problem: 'Read the LM35 on AN1 (RA1) with the 10-bit on-chip ADC and display the digital result on the 16×2 LCD; the temperature is $T(°C) = ADC × 500 / 1023$. The lab writeup\'s variant reads a 0–5 V input (the trimmer pot on AN2: ADCON0 = 0x09) and shows the result the same way.',
     theory: [
       'An analog-to-digital converter (ADC) turns an analog voltage into a binary number the microcontroller can process. Its main characteristics are resolution (n bits), conversion time and reference voltage $V_{ref}$.',
       'Step size (the smallest change the ADC can resolve): $Step = V_{ref} / 2^{n}$. With $V_{ref} = 5 V$: 8-bit → 19.53 mV, 10-bit → 4.88 mV, 12-bit → 1.22 mV, 16-bit → 0.076 mV.',
@@ -315,15 +322,15 @@ export const EXPERIMENTS: Experiment[] = [
       'Conversion time is how long the ADC takes to convert a sample; acquisition time is how long the sample-and-hold circuit needs to charge to the input voltage before conversion.',
       'The PIC18F4550 has a 10-bit ADC with 13 inputs, AN0–AN12 (RA0–RA3, RA5, RE0–RE2, RB0–RB4). RA2 and RA3 can also be $V_{ref}−$ and $V_{ref}+$. On this board the LM35 is on AN1 (RA1) and the trimmer pot on AN2 (RA2).',
       'ADCON0: CHS3:CHS0 select the channel; setting GO/DONE starts a conversion and it reads 0 when the result is ready; ADON switches the module on.',
-      'ADCON1: VCFG1 chooses $V_{ref}−$ (AN2 or $V_{SS}$) and VCFG0 $V_{ref}+$ (AN3 or $V_{DD}$); PCFG3:PCFG0 choose which pins are analog. 0x0D makes AN0–AN1 analog, 0x0C AN0–AN2 (needed for the pot on AN2).',
+      'ADCON1: VCFG1 chooses $V_{ref}−$ (AN2 or $V_{SS}$) and VCFG0 $V_{ref}+$ (AN3 or $V_{DD}$); PCFG3:PCFG0 choose which pins are analog. 0x0D makes AN0–AN1 analog, 0x0C AN0–AN2; the reference program uses 0x0C, which covers both the LM35 (AN1) and the pot (AN2).',
       'ADCON2: ADFM = 1 right-justifies the 10-bit result in ADRESH:ADRESL; ACQT2:ACQT0 set the acquisition time in multiples of $T_{AD}$; ADCS2:ADCS0 select the conversion clock.',
       '$T_{AD}$ (conversion time per bit) must be at least 0.7 µs, and a 10-bit conversion takes $11 T_{AD}$. At $F_{osc} = 48 MHz$, ADCS = 110 ($F_{osc} / 64$) gives $T_{AD} = 64 / 48 MHz = 1.33 µs$, so one conversion takes $11 × 1.33 µs = 14.7 µs$.',
-      'Required acquisition time: $T_{ACQ} = T_{AMP} + T_{C} + T_{COFF} = 0.2 µs + 1.05 µs + 1.2 µs = 2.45 µs$. ACQT = 001 gives $2 T_{AD} = 2.67 µs$; the reference program uses ACQT = 010, $4 T_{AD} = 5.33 µs$. Both exceed 2.45 µs.',
+      'Required acquisition time: $T_{ACQ} = T_{AMP} + T_{C} + T_{COFF} = 0.2 µs + 1.05 µs + 1.2 µs = 2.45 µs$. That is the worst case at 85 °C; at a room temperature of 30 °C, $T_{COFF} = (30 − 25) × 0.02 µs = 0.1 µs$ and $T_{ACQ} = 1.35 µs$. The reference program uses ACQT = 001, $2 T_{AD} = 2.67 µs$, which covers both.',
       'Conversion steps: configure ADCON1, ADCON0 and ADCON2 and turn the module on → wait the acquisition time → set GO/DONE → poll until GO/DONE = 0 (or wait for the ADIF interrupt) → read ADRESH:ADRESL. Wait at least $3 T_{AD}$ before the next acquisition.',
       'The analog pin must also be an input (TRISA bit = 1): an output pin\'s driver overrides the sensor and the ADC then reads 0 V or 5 V.',
       'Input voltage from the result: $V_{in} = ADC × 5 V / 1023$. LM35 output is 10 mV / °C (0 °C → 0 V), so $T(°C) = ADC × 500 / 1023$; one step is $5 V / 1024 ≈ 4.88 mV ≈ 0.49 °C$.',
     ],
-    hardware: ['EXCEL PIC V1.0 module', 'LM35 at the analog input section (or the trimmer pot on AN2)', '16×2 LCD', 'MECO 801 DMM on DC volts (checks the analog input voltage)'],
+    hardware: ['EXCEL PIC V1.0 module', 'LM35 at the analog input section (or the trimmer pot on AN2)', '16×2 LCD', 'MECO 801 DMM on DC volts (checks the analog input voltage; it may be left on AC: press SELECT)'],
     connections: [
       { signal: 'LM35 Vout', mcuPin: 'RA1 / AN1', board: 'Analog input section (ANALOG INP DIP 2 ON)', verified: true },
       { signal: 'Trimmer pot (alternative input)', mcuPin: 'RA2 / AN2', board: 'Analog input section (ANALOG INP DIP 1 ON)', verified: true },
@@ -334,6 +341,9 @@ export const EXPERIMENTS: Experiment[] = [
     board: {
       cables: { LBANK: null, KEY: null, LCD_DATA: 3, LCD_CTRL: 4 },
       tempTask: true,
+      // the meter is left on AC volts, as a previous batch might leave it: the LM35's DC output reads
+      // 0.000 V until the student presses SELECT (a red HUD over the meter says so)
+      dmmAc: true,
       dmm: [
         { plug: 'dmm:v', pin: ['RA1', 'RA2'], label: 'DMM red lead (VΩHz) → RA1 (LM35) or RA2 (pot) on the PORT-A header' },
         { plug: 'dmm:com', pin: 'GND', label: 'DMM black lead (COM) → a GND pin' },
@@ -345,10 +355,10 @@ export const EXPERIMENTS: Experiment[] = [
       ],
     },
     starter: exp6,
-    expected: ['Line 1: "Temperature:"', 'Line 2: current temperature, e.g. "027.3°C"', 'Reading follows the LM35 temperature slider within ±0.5 °C'],
+    expected: ['Line 1: "Result:" followed by the 4-digit ADC result, e.g. "Result:0061" at 30 °C', 'The result follows the LM35 temperature slider: about 2 counts per °C ($T = ADC × 500 / 1023$)'],
     measurements: [{ kind: 'temperature', label: 'LM35' }, { kind: 'lcd', label: 'LCD contents' }],
     procedure: [
-      ...PIC_PROCEDURE.flatMap((p) => (p.startsWith('Plug the Type-B USB') ? ['Connect the multimeter on DC volts: red lead on RA1 (LM35) or RA2 (pot) on the PORT-A header, black lead on a GND pin.', p] : [p])),
+      ...PIC_PROCEDURE.flatMap((p) => (p.startsWith('Plug the Type-B USB') ? ['Connect the multimeter on DC volts (if its display shows AC, press SELECT): red lead on RA1 (LM35) or RA2 (pot) on the PORT-A header, black lead on a GND pin.', p] : [p])),
       'With the program running, change the LM35 temperature in the Hardware tab and check that the LCD reading follows it (and the DMM reads 10 mV per °C on RA1).',
     ],
   },

@@ -185,6 +185,8 @@ export class Engine {
     this.bootloader = false;
     this.bootSeq = 'idle';
     (this.mcu as Pic18).softReset();
+    // the bootloader ran for a while in real time (simulated time stood still): the LCD has settled
+    if (this.board instanceof PicBoard) this.board.lcd.settle();
     this.running = this.board.power;
     this.lastWall = performance.now();
     this.sendFrame();
