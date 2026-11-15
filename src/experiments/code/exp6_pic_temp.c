@@ -63,10 +63,7 @@ void initialize_ADC(void) {
 	ADCON1 = 0x0C;	// Till AN2, declare all Analog and rest digital.
 	ADCON0 = 0x05;	// Channel AN1 (LM35). Just turn ON the ADC module. Conversion will start later. Datasheet mandates this (pg. 275)
 	ADCON2 = 0x8E;	// Right justified, shove all bits at L, rest at H. Use 2TAD, Fosc/64.
-	// Fosc is 21ps. Conversion requires 1.35us at 30 deg temp., Fosc/64 gives 1.3us. Hence, 2TAD is suited.
-
-	// Wait for at least 2us before triggering conversion actually.
-	delay_ms(100);
+	// Fosc is 21ps. Conversion requires 1.35us at 30 deg temp., Fosc/64 gives 1.3us (Tad). Hence, 2TAD covers 1.35us thus is suited.
 }
 
 void main(void) {
@@ -90,11 +87,10 @@ void main(void) {
 	lcd_send_string(adc_result_text);
 
 	while (1) {
-
 		ADCON0 |= 0x02;	// Set only the GO bit.
-		// ADC waits for 2TAD as set.
+		// ADC waits for 2TAD automatically. We don't need any delay.
 		while (ADCON0bits.GO == 1);
-
+		
 		adc_result = (ADRESH << 8) | ADRESL;
 
 		for (i = 0; i < 4 ; i++) {

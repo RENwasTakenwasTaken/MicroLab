@@ -27,8 +27,8 @@ void set_pwm_duty(unsigned long duty)
 	unsigned long value = (600 * duty) / 100;
 
 	// 2. Set PWM duty cycle by writing to CCPR1L and CCP1CON<5:4> bits.
-	CCPR1L = (unsigned char)((unsigned int)(value) >> 2);
-	CCP1CONbits.DC1B = (unsigned int)(value) & 0x03;
+	CCPR1L = (unsigned char)(value) >> 2;
+	CCP1CONbits.DC1B = (unsigned char)(value) & 0x03;
 	// NOTE: Typecasting was used just to be safe from mismatching datalengths.
 }
 

@@ -10,6 +10,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
   {
     date: '2026-11-15',
     items: [
+      'DEFAULT CODE SIMPLIFICATION IN EXP 4 and EXP 6.',
       'LCD shows Warnings for too quick commands. Must add higher delay.',
       'LCD Contrast POT shows Warnings for too low/high contrast. Must adjust LCD POT.',
       'Multimeter warns if Volts is set as AC. Tells us to switch to DC Volts.',
