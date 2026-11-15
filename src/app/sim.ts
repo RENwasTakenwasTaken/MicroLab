@@ -1,7 +1,7 @@
 // UI-side client for the simulation worker plus the build/program workflow.
 
 import type { BoardInput, Mcs51BoardConfig, PicBoardConfig } from '../sim/board/types.ts';
-import { resetBench } from './bench.ts';
+import { resetBench, useBench } from './bench.ts';
 import type { Arch } from '../sim/core/types.ts';
 import type { FrameData, FromWorker, StepMode, ToWorker } from '../sim/protocol.ts';
 import { boardConfigFor, sourceFor, useFrame, useLab, type BuildResult } from './store.ts';
@@ -75,8 +75,9 @@ export function openExperiment(id: string) {
   });
   analyzer.clear();
   sim.init(arch, cfg);
-  // both kits sit on the 3D bench: cables unplugged, power off
-  resetBench();
+  // both kits sit on the 3D bench: cables unplugged, power off (the Keil-style simulator has no bench: always powered)
+  if (exp.simulator !== 'keil') resetBench();
+  else useBench.setState({ view: 'lab', carrying: null, snap: null });
   sim.send({ type: 'analyzer', enabled: true }); // the bench oscilloscope needs pin transitions
   sim.send({ type: 'speed', value: useLab.getState().speed });
   sim.send({ type: 'breakpoints', lines: useLab.getState().breakpoints[id] ?? [] });

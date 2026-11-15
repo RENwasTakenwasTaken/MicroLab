@@ -107,7 +107,7 @@ export function ExperimentPanel({ expId }: { expId: string }) {
             </div>
           ))}
         </div>
-        {!f?.loaded && <p className="dim" style={{ marginTop: 8, fontSize: 11.5 }}>{exp.arch === 'mcs51' ? 'Build in Keil (with Create HEX File), download it with SST EasyIAP and press RESET to see the actual output.' : 'Upload your program through the USB bootloader and press RESET to see the actual output.'}</p>}
+        {!f?.loaded && <p className="dim" style={{ marginTop: 8, fontSize: 11.5 }}>{exp.simulator === 'keil' ? 'Build and start a debug session to see the actual output.' : exp.arch === 'mcs51' ? 'Build in Keil (with Create HEX File), download it with SST EasyIAP and press RESET to see the actual output.' : 'Upload your program through the USB bootloader and press RESET to see the actual output.'}</p>}
       </div>
       <div className="section">
         <h4>Connections</h4>

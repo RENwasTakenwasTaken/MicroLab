@@ -263,6 +263,7 @@ table.conn td { font-size: 11.5px; vertical-align: top; padding-top: 4px; paddin
 .exp-chip { font-size: 10.5px; font-weight: 600; padding: 3px 8px; border-radius: 999px; color: var(--fg-1); background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.1); }
 .exp-chip.pic18 { color: #7dffb5; background: rgba(63, 182, 139, 0.14); border-color: rgba(63, 182, 139, 0.3); }
 .exp-chip.mcs51 { color: #9cc8ff; background: rgba(76, 157, 243, 0.14); border-color: rgba(76, 157, 243, 0.3); }
+.exp-chip.lab3d { color: #e9c6ff; background: rgba(170, 110, 240, 0.14); border-color: rgba(170, 110, 240, 0.32); }
 .exp-chip.edited { color: #ffd479; background: rgba(240, 180, 60, 0.12); border-color: rgba(240, 180, 60, 0.3); }
 .exp-card-title { font-weight: 600; font-size: 15px; line-height: 1.35; padding-right: 22px; }
 .exp-card .go {

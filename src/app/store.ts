@@ -38,7 +38,8 @@ const save = (k: string, v: unknown) => { try { localStorage.setItem(k, JSON.str
 
 export function boardConfigFor(expId: string): PicBoardConfig | Mcs51BoardConfig {
   const exp = getExperiment(expId);
-  if (exp?.arch === 'mcs51') return defaultMcs51Config();
+  // the Keil-style simulator models the AT89C51 of the original lab sheet; the 3D kit has the SST89E516RD2
+  if (exp?.arch === 'mcs51') return exp.simulator === 'keil' ? { ...defaultMcs51Config(), variant: 'AT89C51' } : defaultMcs51Config();
   const cfg = defaultPicBoardConfig();
   // the bench starts as the student finds it in the lab: no ribbon or motor wire plugged in and
   // every DIP switch OFF. exp.board lists what has to be set up (workflow steps).

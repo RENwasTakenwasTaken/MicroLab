@@ -26,7 +26,7 @@ const iapLog = () => ev(() => window.__vlab.bench.getState().iap.log.join('\n'))
 // photo coordinates of the trainer -> world (as world.ts boardToWorld), module top = 12.6 mm
 const project = (px, py, h) => ev(([x, y, z]) => window.__vlab3d.project([94 - y, z, x - 69.5]), [px, py, h]);
 
-await page.goto('http://localhost:5173/#/exp/exp1');
+await page.goto('http://localhost:5173/#/exp/exp1_3d');
 await page.waitForFunction(() => window.__vlab && window.__vlab.frame.getState().frame && window.__vlab3d, null, { timeout: 60000 });
 await page.waitForTimeout(4000);
 

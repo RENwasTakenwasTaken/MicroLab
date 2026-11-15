@@ -62,6 +62,13 @@ export interface Experiment {
   };
   /** link to a setup video for the practical (shown on the lab sheet and in the setup guide when set) */
   video?: string;
+  /**
+   * 'keil': the original Keil µVision-style simulator (editor, Start Debug, virtual Port 1 LED bar)
+   * instead of the 3D lab bench. Omitted: the 3D lab.
+   */
+  simulator?: 'keil';
+  /** text of the experiment's card on the home screen, when it differs from the title */
+  card?: string;
   starter: string;
   expected: string[];
   measurements: Measurement[];
@@ -88,7 +95,34 @@ const PB_ON: DipReq[] = [
 
 export const EXPERIMENTS: Experiment[] = [
   {
-    id: 'exp1', no: 1, co: 'CO1', arch: 'mcs51', mcu: 'SST89E516RD2', status: 'ready',
+    id: 'exp1', no: 1, co: 'CO1', arch: 'mcs51', mcu: 'AT89C51', status: 'ready', simulator: 'keil',
+    title: 'LED toggling using the 8051 microcontroller',
+    objective: 'Develop and implement an embedded program to toggle an LED using an 8051 microcontroller.',
+    problem: 'Write an embedded C program for the 8051 that toggles an LED connected to P1.0 with a delay of 500 ms, and observe the port in the simulator.',
+    theory: [
+      'Port 1 is a quasi-bidirectional port with internal pull-ups; writing 0 drives the pin low.',
+      'sbit declares a single addressable bit of a bit-addressable SFR (P1^0 = bit address 0x90).',
+      'Timer 0 mode 1 is a 16-bit up-counter clocked at $F_{osc} / 12$; TF0 sets on overflow from 0xFFFF.',
+    ],
+    hardware: ['No physical board: Keil µVision simulator workflow', 'AT89C51, 11.0592 MHz crystal', 'Virtual LED bar on Port 1 (LED lit when pin = 1)'],
+    connections: [{ signal: 'LED', mcuPin: 'P1.0', board: 'Virtual LED 0 (Port 1 window)', verified: true }],
+    starter: exp1,
+    expected: ['P1.0 toggles continuously', 'Each state lasts ≈ 500 ms (period ≈ 1 s, 1 Hz)', 'Port 1 window shows bit 0 changing'],
+    measurements: [
+      { kind: 'pinFreq', label: 'P1.0 toggle frequency', pin: { port: 1, bit: 0 }, expectHz: 1, tolerance: 0.05 },
+      { kind: 'ledbar51', label: 'Port 1 LEDs' },
+    ],
+    procedure: [
+      'Write the program in the editor (Keil C51 syntax is accepted).',
+      'Build Target (F7) and check the Build Output for errors.',
+      'Start the debug session (Ctrl+F5), then Run (F5).',
+      'Open Peripherals → Port 1 and watch P1.0 toggle; use Step (F11) to single-step.',
+    ],
+  },
+  {
+    // Expt 1 again, on the 3D bench: EXCEL-51 kit, Keil µVision + SST EasyIAP on the lab computer
+    id: 'exp1_3d', no: 1, co: 'CO1', arch: 'mcs51', mcu: 'SST89E516RD2', status: 'ready',
+    card: '3D simulation environment',
     title: 'LED toggling using the 8051 microcontroller',
     objective: 'Develop and implement an embedded program to toggle an LED using an 8051 microcontroller.',
     problem: 'Write an embedded C program for the 8051 that toggles the LED on P1.0 with a delay of 500 ms. Build it in Keil \u00b5Vision, download it to the EXCEL-51 kit with SST EasyIAP and observe module LED L0.',

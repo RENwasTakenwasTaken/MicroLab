@@ -1,16 +1,21 @@
-// Experiment workspace: the 3D lab (PIC or 8051 kit on the bench) fills the stage;
+// Experiment workspace: the 3D lab (PIC or 8051 kit on the bench) or, for the Keil-style 8051
+// simulator, the editor + virtual target fills the stage;
 // the lab sheet (left), debugger (right) and output (bottom) float above it as
 // hideable glass panes.
 
 import { lazy, Suspense, useEffect, useState, type ReactNode, type PointerEvent } from 'react';
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { useLab, type LeftTab } from './store.ts';
 import { useBench } from './bench.ts';
 import { openExperiment, sim } from './sim.ts';
+import { getExperiment } from '../experiments/experiments.ts';
 import { TopBar } from '../ide/TopBar.tsx';
+import { CodeEditor } from '../ide/Editor.tsx';
 import { BottomPanel } from '../ide/BottomPanel.tsx';
 import { DebugPanel } from '../debug/DebugPanel.tsx';
 import { ExperimentPanel } from '../lab/ExperimentPanel.tsx';
 import { HardwarePanel } from '../lab/HardwarePanel.tsx';
+import { VirtualTarget51 } from '../lab/VirtualTarget51.tsx';
 import { Icon } from '../ui/icons.tsx';
 
 const LabView = lazy(() => import('../lab3d/LabView.tsx').then((m) => ({ default: m.LabView })));
@@ -26,6 +31,7 @@ function useNarrow() {
 }
 
 function Hardware({ expId }: { expId: string }) {
+  if (getExperiment(expId)?.simulator === 'keil') return <VirtualTarget51 />;
   return (
     <Suspense fallback={<div className="empty"><span className="spinner" style={{ display: 'inline-block' }} /> Loading the 3D laboratory…</div>}>
       <LabView expId={expId} />
@@ -118,10 +124,12 @@ function BottomPane({ expId, open, onToggle }: { expId: string; open: boolean; o
 
 export function Workspace({ expId }: { expId: string }) {
   const narrow = useNarrow();
+  // Keil-style simulator (Expt 1's first card): editor beside the virtual target instead of the 3D bench
+  const keilSim = getExperiment(expId)?.simulator === 'keil';
   const leftOpen = useLab((s) => s.leftOpen);
   const rightOpen = useLab((s) => s.rightOpen);
   const bottomOpen = useLab((s) => s.bottomOpen);
-  const [mobileTab, setMobileTab] = useState<'board' | 'output' | 'debug' | 'lab'>('board');
+  const [mobileTab, setMobileTab] = useState<'code' | 'board' | 'output' | 'debug' | 'lab'>('board');
   const coding = useBench((s) => s.view === 'computer');
   useEffect(() => { openExperiment(expId); }, [expId]);
   // the bench instruments read the transition log, so it runs even while the output pane is hidden
@@ -134,13 +142,14 @@ export function Workspace({ expId }: { expId: string }) {
   }, [coding]);
 
   if (narrow) {
-    // code is written on the lab computer inside the 3D bench
-    const tabs = [['lab', 'Lab', 'flask'], ['board', 'Bench', 'board'], ['output', 'Output', 'terminal'], ['debug', 'Debug', 'bug']] as const;
+    // in the 3D lab, code is written on the lab computer inside the bench
+    const tabs = ([['lab', 'Lab', 'flask'], ['code', 'Code', 'file'], ['board', keilSim ? 'Board' : 'Bench', 'board'], ['output', 'Output', 'terminal'], ['debug', 'Debug', 'bug']] as const).filter((t) => keilSim || t[0] !== 'code');
     return (
       <div className="ws">
         <TopBar expId={expId} />
         <div className="ws-mobile">
           <div className={mobileTab === 'lab' ? 'mshow' : 'mhide'}><LeftPanel expId={expId} /></div>
+          {keilSim && <div className={mobileTab === 'code' ? 'mshow' : 'mhide'}><CodeEditor expId={expId} /></div>}
           <div className={mobileTab === 'board' ? 'mshow' : 'mhide'}><div className="panel"><div className="panel-body"><Hardware expId={expId} /></div></div></div>
           <div className={mobileTab === 'output' ? 'mshow' : 'mhide'}><BottomPanel expId={expId} /></div>
           <div className={mobileTab === 'debug' ? 'mshow' : 'mhide'}><DebugPanel /></div>
@@ -157,7 +166,17 @@ export function Workspace({ expId }: { expId: string }) {
     <div className="ws">
       <TopBar expId={expId} />
       <div className={`ws-main ws-stage ${leftOpen ? 'l-open' : ''} ${rightOpen ? 'r-open' : ''}`}>
-        <div className="panel"><div className="panel-body" style={{ overflow: 'hidden' }}><Hardware expId={expId} /></div></div>
+        {keilSim ? (
+          <PanelGroup direction="horizontal" autoSaveId="vlab-layout-hc">
+            <Panel id="editor" order={1} defaultSize={46} minSize={20}><CodeEditor expId={expId} /></Panel>
+            <PanelResizeHandle className="resize-h" />
+            <Panel id="board" order={2} defaultSize={54} minSize={20}>
+              <div className="panel"><div className="panel-body" style={{ overflow: 'hidden' }}><Hardware expId={expId} /></div></div>
+            </Panel>
+          </PanelGroup>
+        ) : (
+          <div className="panel"><div className="panel-body" style={{ overflow: 'hidden' }}><Hardware expId={expId} /></div></div>
+        )}
 
         <SidePane side="left" title="Lab sheet" icon="flask" open={leftOpen} onToggle={() => set({ leftOpen: !leftOpen })}>
           <LeftPanel expId={expId} />

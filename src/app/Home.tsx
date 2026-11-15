@@ -40,10 +40,11 @@ export function Home() {
                     <div className="exp-card-top">
                       <span className="exp-no">{String(e.no).padStart(2, '0')}</span>
                       <span className={`exp-chip ${e.arch}`}>{e.mcu}</span>
+                      {e.arch === 'mcs51' && !e.simulator && <span className="exp-chip lab3d">3D lab</span>}
                       {sources[e.id] !== undefined && <span className="exp-chip edited">edited</span>}
                       {!ready && <span className="exp-chip">planned</span>}
                     </div>
-                    <div className="exp-card-title">{e.title}</div>
+                    <div className="exp-card-title">{e.card ?? e.title}</div>
                     {ready && <span className="go" aria-hidden><Icon name="chevronRight" size={16} /></span>}
                   </a>
                 );

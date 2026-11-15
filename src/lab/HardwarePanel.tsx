@@ -8,6 +8,7 @@ import { sim } from '../app/sim.ts';
 import { mainsConnected, useBench } from '../app/bench.ts';
 import type { FrcTarget, Mcs51BoardConfig, PicBoardConfig, PinRef } from '../sim/board/types.ts';
 import { Icon } from '../ui/icons.tsx';
+import { getExperiment } from '../experiments/experiments.ts';
 
 const PORTS = ['A', 'B', 'C', 'D', 'E'];
 const FRC_NAMES: Record<FrcTarget, string> = { LBANK: 'L_BANK (LED array)', KEY: 'MAT_KEY (4×4 keypad)', LCD_DATA: 'LCD_DATA (D0–D7)', LCD_CTRL: 'LCD_CNTRL (RS/RW/EN)' };
@@ -180,8 +181,30 @@ function PicHardware() {
   );
 }
 
+/** Expt 1's first card: the original Keil µVision-style simulator, no physical board. */
+function Mcs51Simulator() {
+  const cfg = useLab((s) => s.boardCfg) as Mcs51BoardConfig;
+  return (
+    <div className="section">
+      <h4>8051 target</h4>
+      <div className="kv">
+        <span>Device</span><span>{cfg.variant}</span>
+        <span>Crystal</span><span>{(cfg.clockHz / 1e6).toFixed(4)} MHz</span>
+        <span>Machine cycle</span><span>{(12e6 / cfg.clockHz).toFixed(3)} µs</span>
+        <span>LED bar</span><span>Port {cfg.ledPort} ({cfg.ledActiveLow ? 'active low' : 'lit when pin = 1'})</span>
+      </div>
+      <p className="muted" style={{ marginTop: 10, fontSize: 12 }}>
+        Like Keil µVision's simulator there is no physical board: drive input pins from the Port windows in the hardware view
+        (click a pin bit to pull it low, as an external switch would).
+      </p>
+    </div>
+  );
+}
+
 function Mcs51Hardware() {
   const cfg = useLab((s) => s.boardCfg) as Mcs51BoardConfig;
+  const keilSim = useLab((s) => s.route.page === 'exp' && getExperiment(s.route.id)?.simulator === 'keil');
+  if (keilSim) return <Mcs51Simulator />;
   return (
     <div className="section">
       <h4>EXCEL-51 v1.0 kit</h4>
