@@ -20,11 +20,11 @@ const MAT = {
 };
 
 /** Switchboard plate on the wall: the mains switch (ON, red indicator) and a 3-pin socket. */
-function WallBoard() {
-  const { pos, w, h, d, socketX, switchX } = WALLBOARD;
+export function WallBoard({ pos = WALLBOARD.pos, info }: { pos?: [number, number, number]; info?: string } = {}) {
+  const { w, h, d, socketX, switchX } = WALLBOARD;
   const hover = useHover({
     name: 'Wall socket (230 V)',
-    info: 'Switchboard on the wall in front of the bench. Plug the 12 V adapter\'s 2-pin plug into the socket, then switch the board\'s POWER switch ON.',
+    info: info ?? 'Switchboard on the wall in front of the bench. Plug the 12 V adapter\'s 2-pin plug into the socket, then switch the board\'s POWER switch ON.',
   });
   const face = d + 0.05;
   return (

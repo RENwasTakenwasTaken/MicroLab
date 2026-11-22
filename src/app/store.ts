@@ -49,7 +49,8 @@ export function boardConfigFor(expId: string): PicBoardConfig | Mcs51BoardConfig
 }
 
 interface LabState {
-  route: { page: 'home' } | { page: 'exp'; id: string };
+  /** landing: choose a lab · home / exp: EP lab · pce / pce-exp: PCE lab */
+  route: { page: 'landing' } | { page: 'home' } | { page: 'exp'; id: string } | { page: 'pce' } | { page: 'pce-exp'; id: string };
   arch: Arch;
   sources: Record<string, string>;
   breakpoints: Record<string, number[]>;
@@ -98,7 +99,7 @@ interface LabState {
 }
 
 export const useLab = create<LabState>((set, get) => ({
-  route: { page: 'home' },
+  route: { page: 'landing' },
   arch: 'pic18',
   sources: load<Record<string, string>>(LS_KEY, {}),
   breakpoints: load<Record<string, number[]>>(LS_BP, {}),

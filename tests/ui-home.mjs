@@ -17,7 +17,7 @@ page.on('pageerror', (e) => { if (KNOWN.test(String(e))) console.log('  known: r
 let fails = 0;
 const ok = (n, c, d = '') => { console.log(`${c ? '  PASS' : '  FAIL'}  ${n}${d ? '  — ' + d : ''}`); if (!c) fails++; };
 
-await page.goto('http://localhost:5173/#/');
+await page.goto('http://localhost:5173/#/ep');
 await page.waitForSelector('.whats-new');
 ok('"What\'s new" sits right under the heading', await page.$eval('.home-intro', (s) => !!s.querySelector('h1') && !!s.querySelector('.whats-new')));
 ok('starts collapsed', !(await page.$eval('.whats-new', (d) => d.open)) && !(await page.isVisible('.wn-body')));
@@ -38,7 +38,7 @@ ok('Home button asks first; Cancel stays in the experiment', /Leave Expt 2/.test
 page.once('dialog', (d) => d.accept());
 await page.click('.topbar button[title="All experiments"]');
 await page.waitForSelector('.home', { timeout: 5000 }).catch(() => {});
-ok('OK goes to all experiments', (await page.evaluate(() => location.hash)) === '#/' && !!(await page.$('.home')));
+ok('OK goes to all EP experiments', (await page.evaluate(() => location.hash)) === '#/ep' && !!(await page.$('.home .whats-new')));
 
 console.log('errors:', errors.length ? errors.slice(0, 5) : 'none');
 await browser.close();

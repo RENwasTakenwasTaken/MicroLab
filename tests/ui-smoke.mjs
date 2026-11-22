@@ -25,10 +25,10 @@ const open = async (exp) => {
 };
 
 // home: two Expt 1 cards
-await page.goto('http://localhost:5173/#/');
+await page.goto('http://localhost:5173/#/ep');
 await page.waitForSelector('.exp-card');
 const cards = await page.$$eval('.exp-card', (els) => els.map((e) => ({ href: e.getAttribute('href'), text: e.querySelector('.exp-card-title')?.textContent, no: e.querySelector('.exp-no')?.textContent })));
-const c1 = cards.find((c) => c.href === '#/exp/exp1'), c3d = cards.find((c) => c.href === '#/exp/exp1_3d');
+const c1 = cards.find((c) => c.href === '#/ep/exp/exp1'), c3d = cards.find((c) => c.href === '#/ep/exp/exp1_3d');
 ok('home: Expt 1 card (Keil simulator) and a second Expt 1 card for the 3D environment', !!c1 && !!c3d && c1.no === '01' && c3d.no === '01' && cards.indexOf(c3d) === cards.indexOf(c1) + 1, `${c1?.text} | ${c3d?.text}`);
 ok('second card reads "3D simulation environment"', c3d?.text === '3D simulation environment');
 await page.screenshot({ path: `${out}/home.png` });

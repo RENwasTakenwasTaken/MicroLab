@@ -37,12 +37,11 @@ export function Home() {
         <div className="brand">
           <div className="brand-mark"><Icon name="chip" size={20} /></div>
           <div>
-            <div className="brand-name">PICT KA μLab</div>
-            <div className="brand-sub"></div>
+            <div className="brand-name">PICT KA μLab <span>EP Lab</span></div>
+            <div className="brand-sub">Embedded Processors Lab</div>
           </div>
-          
         </div>
-        
+        <a className="btn ghost" href="#/"><Icon name="chevronLeft" /> All labs</a>
       </header>
 
       <main className="home-main">
@@ -61,7 +60,7 @@ export function Home() {
               {EXPERIMENTS.filter((e) => e.co === co).map((e) => {
                 const ready = e.status === 'ready';
                 return (
-                  <a key={e.id} className={`exp-card ${ready ? '' : 'planned'}`} href={ready ? `#/exp/${e.id}` : undefined} aria-disabled={!ready} title={e.objective}>
+                  <a key={e.id} className={`exp-card ${ready ? '' : 'planned'}`} href={ready ? `#/ep/exp/${e.id}` : undefined} aria-disabled={!ready} title={e.objective}>
                     <div className="exp-card-top">
                       <span className="exp-no">{String(e.no).padStart(2, '0')}</span>
                       <span className={`exp-chip ${e.arch}`}>{e.mcu}</span>

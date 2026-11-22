@@ -20,7 +20,7 @@ import { Icon } from '../ui/icons.tsx';
 
 const LabView = lazy(() => import('../lab3d/LabView.tsx').then((m) => ({ default: m.LabView })));
 
-function useNarrow() {
+export function useNarrow() {
   const [narrow, setNarrow] = useState(() => window.innerWidth < 980);
   useEffect(() => {
     const on = () => setNarrow(window.innerWidth < 980);
@@ -68,7 +68,7 @@ function PaneHandle({ side, title, icon, open, onToggle }: { side: 'left' | 'rig
  * A floating glass pane with an edge handle. The pane is unmounted while hidden,
  * so its live views stop re-rendering and the 3D view gets the full frame budget.
  */
-function SidePane({ side, title, icon, open, onToggle, children }: {
+export function SidePane({ side, title, icon, open, onToggle, children }: {
   side: 'left' | 'right'; title: string; icon: string; open: boolean; onToggle(): void; children: ReactNode;
 }) {
   return (

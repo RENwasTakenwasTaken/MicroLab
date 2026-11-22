@@ -1,0 +1,9 @@
+/* PCE lab: additions to the shared lab styles */
+.pce-warn { margin: 0 12px 8px; }
+.pce-sheet table.obs td, .pce-sheet table.obs th { padding: 3px 5px; white-space: nowrap; text-align: center; font-family: var(--sans); }
+.pce-sheet table.obs td:first-child, .pce-sheet table.obs th:first-child { text-align: left; }
+.pce-sheet table.obs input { width: 46px; height: 24px; padding: 0 4px; text-align: center; font: 12px var(--mono); }
+.pce-sheet table.res td { font-family: var(--mono); }
+.obs-note { margin-top: 8px !important; font-size: 11.5px; line-height: 1.5; }
+.pce-sheet table.fm-obs td { text-align: left; font-family: var(--sans); white-space: normal; }
+.pce-sheet table.fm-obs td:last-child { white-space: nowrap; color: var(--fg-2); }

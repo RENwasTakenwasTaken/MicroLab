@@ -69,7 +69,7 @@ export function TopBar({ expId }: { expId: string }) {
   return (
     <div className="topbar">
       <div className="tb-group">
-        <button className="btn ghost icon" title="All experiments" onClick={() => { if (confirmLeave(exp.no, keilSim)) location.hash = '#/'; }}><Icon name="home" /></button>
+        <button className="btn ghost icon" title="All experiments" onClick={() => { if (confirmLeave(exp.no, keilSim)) location.hash = '#/ep'; }}><Icon name="home" /></button>
         <div className="tb-title">
           <span className="tb-exp">Expt {exp.no}</span>
           <span className="tb-name">{exp.title}</span>

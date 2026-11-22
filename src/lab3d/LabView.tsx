@@ -31,7 +31,7 @@ import './lab.css';
  * drops shadows, antialiasing and high-DPI rendering to stay usable.
  */
 let gpuCache: { renderer: string; software: boolean } | null = null;
-function gpuInfo() {
+export function gpuInfo() {
   if (gpuCache) return gpuCache;
   let renderer = '';
   try {
@@ -51,7 +51,7 @@ const GPU_NOTICE_KEY = 'vlab.gpuNotice.dismissed';
 const softwareName = (r: string) =>
   /swiftshader/i.test(r) ? 'SwiftShader' : /llvmpipe/i.test(r) ? 'llvmpipe' : /basic render/i.test(r) ? 'Microsoft Basic Render Driver' : /softpipe/i.test(r) ? 'softpipe' : '';
 
-function GpuNotice({ renderer }: { renderer: string }) {
+export function GpuNotice({ renderer }: { renderer: string }) {
   const [hidden, setHidden] = useState(() => { try { return sessionStorage.getItem(GPU_NOTICE_KEY) === '1'; } catch { return false; } });
   if (hidden) return null;
   const dismiss = () => { setHidden(true); try { sessionStorage.setItem(GPU_NOTICE_KEY, '1'); } catch { /* storage unavailable */ } };
@@ -94,16 +94,16 @@ function poseFor(view: ViewMode, aspect: number): Pose {
   }
 }
 
-type Controls = { target: THREE.Vector3; update(): void; enabled: boolean } | null;
+export type Controls = { target: THREE.Vector3; update(): void; enabled: boolean } | null;
 
 /** Last time a movement key was pressed; a view transition in progress gives way to it. */
-const navInterrupt = { at: 0 };
+export const navInterrupt = { at: 0 };
 /** Current keyboard motion (world units/s, rad/s); eased so movement fades in and out. */
-const navMotion = { vel: new THREE.Vector3(), yaw: 0, pitch: 0 };
+export const navMotion = { vel: new THREE.Vector3(), yaw: 0, pitch: 0 };
 const NAV_EASE = 0.18; // s: time constant of the fade in / fade out
 
 const NAV_KEYS = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']);
-const isTyping = (t: EventTarget | null) =>
+export const isTyping = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || !!t.closest('.monaco-editor'));
 
 /**
@@ -119,7 +119,7 @@ const navKey = (code: string) => (!ARROWS_ORBIT && ARROW_MOVE[code]) || code;
  * Q/E down/up, Shift moves faster. Camera and orbit target move together, so mouse
  * orbit/zoom carry on from wherever the keys left the view.
  */
-function KeyboardNav() {
+export function KeyboardNav() {
   const { camera, controls } = useThree();
   const keys = useRef(new Set<string>());
   const fast = useRef(false);
@@ -563,14 +563,14 @@ function onSceneClick(e: ThreeEvent<MouseEvent>) {
 }
 
 /** Last pointer position inside the lab view (kept out of React state: see HoverTip). */
-const pointer = { x: 0, y: 0 };
+export const pointer = { x: 0, y: 0 };
 
 /**
  * Tooltip that follows the pointer. It moves its own element directly instead of storing the
  * position in LabView's state: a LabView re-render on every pointer move used to re-render the
  * whole 3D scene and stall the page.
  */
-function HoverTip({ hover, wrap }: { hover: HoverInfo; wrap: React.RefObject<HTMLDivElement | null> }) {
+export function HoverTip({ hover, wrap }: { hover: HoverInfo; wrap: React.RefObject<HTMLDivElement | null> }) {
   const el = useRef<HTMLDivElement>(null);
   const [live, setLive] = useState('');
   useEffect(() => {
