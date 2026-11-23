@@ -2,7 +2,7 @@
 // with it, and where its controls start. Each kit folder (am/, fm/) fills one of these in.
 
 export type V3 = [number, number, number];
-export type KitId = 'am' | 'fm' | 'pam' | 'lc' | 'mf';
+export type KitId = 'am' | 'fm' | 'pam' | 'lc' | 'mf' | 'fsk' | 'dsss';
 
 /** pin: 2 mm hollow rod (AM kit) · jack: 4 mm banana socket · ac: wall socket */
 export type SocketKind = 'pin' | 'jack' | 'ac';
@@ -43,6 +43,8 @@ export interface KitBench {
   box: { w: number; d: number; top: number };
   /** the kit has no power switch of its own: it is on whenever its mains plug is in */
   noSwitch?: boolean;
+  /** the 2 mm patch cords are stackable: a second cord's plug, or a probe needle, goes into the back of a cord's plug */
+  stack?: boolean;
 }
 
 export const dist = (a: V3, b: V3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);

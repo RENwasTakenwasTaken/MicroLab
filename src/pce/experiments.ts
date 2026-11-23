@@ -5,6 +5,8 @@ import { FM_APPARATUS, FM_OBJECTIVES, FM_PROCEDURE, FM_THEORY } from './fm/sheet
 import { PAM_APPARATUS, PAM_OBJECTIVES, PAM_PROCEDURE, PAM_THEORY } from './pam/sheet.ts';
 import { LC_APPARATUS, LC_OBJECTIVES, LC_PROCEDURE, LC_THEORY } from './lc/sheet.ts';
 import { MF_APPARATUS, MF_OBJECTIVES, MF_PROCEDURE, MF_THEORY } from './mf/sheet.ts';
+import { FSK_APPARATUS, FSK_OBJECTIVES, FSK_PROCEDURE, FSK_THEORY } from './fsk/sheet.ts';
+import { SS_APPARATUS, SS_OBJECTIVES, SS_PROCEDURE, SS_THEORY } from './dsss/sheet.ts';
 
 export interface PceExperiment {
   id: string;
@@ -95,8 +97,18 @@ export const PCE_EXPERIMENTS: PceExperiment[] = [
     title: 'Generate baseband input bit sequences and evaluate receiver performance in noisy environments using appropriate hardware setup.',
     objectives: MF_OBJECTIVES, apparatus: MF_APPARATUS, theory: MF_THEORY, procedure: MF_PROCEDURE,
   },
-  planned(7, 'CO3', 'BFSK: ASK1, ASK2 and BFSK waveforms', 'Analyze BFSK modulation using block diagrams; generate ASK1, ASK2, BFSK waveforms, sketch input and carrier signals, and evaluate bandwidth using practical methods.', 'BFSK kit'),
-  planned(8, 'CO3', 'Direct sequence spread spectrum: PN codes and DSSS signals', 'Demonstrate DSSS modulation; generate PN codes and DSSS signals using hardware setup and sketch the associated waveforms.', 'DSSS kit'),
+  {
+    id: 'fsk', no: 7, co: 'CO3', status: 'ready', kit: 'Sigma COM115M FSK trainer',
+    card: 'BFSK: ASK1, ASK2 and BFSK waveforms, spectra and bandwidth, PLL receiver',
+    title: 'Analyze BFSK modulation using block diagrams; generate ASK1, ASK2, BFSK waveforms, sketch input and carrier signals, and evaluate bandwidth using practical methods.',
+    objectives: FSK_OBJECTIVES, apparatus: FSK_APPARATUS, theory: FSK_THEORY, procedure: FSK_PROCEDURE,
+  },
+  {
+    id: 'dsss', no: 8, co: 'CO3', status: 'ready', kit: 'Sigma DSSS100 DSSS trainer',
+    card: 'Direct sequence spread spectrum: PN code, spreading, BPSK, despreading and processing gain',
+    title: 'Demonstrate DSSS modulation; generate PN codes and DSSS signals using hardware setup and sketch the associated waveforms.',
+    objectives: SS_OBJECTIVES, apparatus: SS_APPARATUS, theory: SS_THEORY, procedure: SS_PROCEDURE,
+  },
 ];
 
 export const getPceExperiment = (id: string) => PCE_EXPERIMENTS.find((e) => e.id === id);

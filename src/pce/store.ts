@@ -9,6 +9,8 @@ import { FM_BENCH } from './fm/bench.ts';
 import { PAM_BENCH } from './pam/bench.ts';
 import { LC_BENCH } from './lc/bench.ts';
 import { MF_BENCH } from './mf/bench.ts';
+import { FSK_BENCH } from './fsk/bench.ts';
+import { DSSS_BENCH } from './dsss/bench.ts';
 import type { KitBench, KitId, PcePlug, V3 } from './kit.ts';
 import { SOCKET, dist, useSockets } from './world.ts';
 import { initialScope, type ScopeState } from './scope/state.ts';
@@ -21,9 +23,9 @@ export type DmmMode = 'V' | 'OHM' | 'HZ' | 'UA' | 'MA' | 'A' | 'TEMP';
 export const DMM_MODES: DmmMode[] = ['V', 'OHM', 'HZ', 'UA', 'MA', 'A', 'TEMP'];
 export interface DmmState { on: boolean; mode: DmmMode; ac: boolean }
 
-export const BENCH: Record<KitId, KitBench> = { am: AM_BENCH, fm: FM_BENCH, pam: PAM_BENCH, lc: LC_BENCH, mf: MF_BENCH };
+export const BENCH: Record<KitId, KitBench> = { am: AM_BENCH, fm: FM_BENCH, pam: PAM_BENCH, lc: LC_BENCH, mf: MF_BENCH, fsk: FSK_BENCH, dsss: DSSS_BENCH };
 /** Which kit each experiment puts on the bench. */
-export const KIT_OF: Record<string, KitId> = { am: 'am', fm: 'fm', pam: 'pam', lc: 'lc', mf: 'mf' };
+export const KIT_OF: Record<string, KitId> = { am: 'am', fm: 'fm', pam: 'pam', lc: 'lc', mf: 'mf', fsk: 'fsk', dsss: 'dsss' };
 /** A probe's ground lead reaches this far from its tip. */
 export const GND_LEAD = 120;
 /** Banana plugs stack: this many fit one socket. */
@@ -110,7 +112,9 @@ export const usePce = create<PceState>((set, get) => ({
       if (here.some((q) => q.kind === 'sleeve')) return fail(`A cord's sleeve covers ${name(socket)}: clip the ground lead onto a free pin`);
       if (dist(where(plugs[p.cable]), s.pos) > GND_LEAD) return fail(`The ground lead does not reach ${name(socket)} from where the ${p.cable.toUpperCase()} probe is`);
     } else if (p.kind !== 'ac') {
-      if (here.some((q) => q.kind === 'tip' || q.kind === 'sleeve')) return fail(`${name(socket)} already has something on it: use the pin beside it, or a free one`);
+      // stackable cords: a probe needle goes into the back of the top plug, and a second plug stacks on a first
+      const sleeves = here.filter((q) => q.kind === 'sleeve').length, stack = !!BENCH[get().kit].stack;
+      if (here.some((q) => q.kind === 'tip') || (sleeves && !(stack && (p.kind === 'tip' || sleeves < 2)))) return fail(`${name(socket)} already has something on it: use the pin beside it, or a free one`);
       if (p.kind === 'sleeve') {
         const far = plugs[other(id)];
         const reach = BENCH[get().kit].cords.find((c) => c.id === p.cable)!.reach;

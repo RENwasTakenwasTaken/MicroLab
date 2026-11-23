@@ -22,6 +22,8 @@ const bench = () => BENCH[usePce.getState().kit];
 /** Carried plugs travel a little above the kit's connectors. */
 const carryY = () => KIT_POS[1] + bench().box.top + 30;
 /** Lengths along a plug's own axis (mm): probe body, ground-lead take-off, sleeve, clip, mains plug. */
+/** Height of one stacked 2 mm plug (mm). */
+const SLEEVE_STACK = 18;
 const LEN = { probe: 114, lead: 36, sleeve: 20, clip: 34, ac: 31, banana: 30 };
 /** Each banana plug stacked on another sits this much higher. */
 const STACK_STEP = 24;
@@ -37,12 +39,20 @@ export function plugPose(p: PcePlug, plugs: Plugs, carrying: string | null): Pos
     case 'tip':
       if (carried) return { pos: carryPos.clone(), dir: UP.clone() };
       // the needle goes a few millimetres into the hollow pin, and the probe stands by itself
-      if (s) return { pos: V(s.pos[0], s.pos[1] - 4, s.pos[2]), dir: V(0.05, 1, 0.1).normalize() };
+      // on a stackable cord plug, the needle goes into the back of the plug instead
+      if (s) {
+        const n = Object.values(plugs).filter((q) => q.kind === 'sleeve' && q.attachedTo === s.id && q.id !== carrying).length;
+        return { pos: V(s.pos[0], s.pos[1] - 4 + (n ? 13 + (n - 1) * SLEEVE_STACK : 0), s.pos[2]), dir: V(0.05, 1, 0.1).normalize() };
+      }
       return { pos: V(p.rest[0], DESK_Y + 4.8, p.rest[2]), dir: V(0.28, 0, 1).normalize() };
     case 'sleeve': {
       if (carried) return { pos: carryPos.clone(), dir: UP.clone() };
       // over a pin the sleeve slides down to the cover; in a flush 2 mm socket the plug sits on its rim
-      if (s) return { pos: V(s.pos[0], s.noClip ? s.pos[1] - 1.5 : s.pos[1] - (AM_LEVEL.pin - AM_LEVEL.acrylic) + 1, s.pos[2]), dir: UP.clone() };
+      if (s) {
+        // a stacked plug sits in the back of the one below it
+        const below = Object.values(plugs).filter((q) => q.kind === 'sleeve' && q.attachedTo === s.id && q.id !== carrying && (q.seq ?? 0) < (p.seq ?? 0)).length;
+        return { pos: V(s.pos[0], (s.noClip ? s.pos[1] - 1.5 : s.pos[1] - (AM_LEVEL.pin - AM_LEVEL.acrylic) + 1) + below * SLEEVE_STACK, s.pos[2]), dir: UP.clone() };
+      }
       const pos = V(p.rest[0], DESK_Y + 2.6, p.rest[2]);
       const far = plugs[p.id.endsWith(':a') ? `${p.cable}:b` : `${p.cable}:a`];
       return { pos, dir: flat(V(far.rest[0], 0, far.rest[2]).sub(pos)) };
