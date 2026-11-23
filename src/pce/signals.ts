@@ -5,13 +5,14 @@ import * as am from './am/signals.ts';
 import * as fm from './fm/signals.ts';
 import * as pam from './pam/signals.ts';
 import * as lc from './lc/signals.ts';
+import * as mf from './mf/signals.ts';
 import { usePce } from './store.ts';
 import type { Source } from './wiring.ts';
 
 export { now } from './wiring.ts';
 export type { Source } from './wiring.ts';
 
-const MODELS = { am, fm, pam, lc };
+const MODELS = { am, fm, pam, lc, mf };
 const model = () => MODELS[usePce.getState().kit];
 
 /** Bring the kit's oscillators up to date with its knobs and power switch. Call before reading signals. */

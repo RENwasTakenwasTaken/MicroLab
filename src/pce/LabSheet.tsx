@@ -8,6 +8,7 @@ import { getPceExperiment } from './experiments.ts';
 import { FmObservations } from './fm/Observations.tsx';
 import { PamObservations } from './pam/Observations.tsx';
 import { LcObservations } from './lc/Observations.tsx';
+import { MfObservations } from './mf/Observations.tsx';
 
 const LS = 'vlab.pce.am.obs.v1';
 const CASES = ['m < 1', 'm = 1', 'm > 1'];
@@ -121,6 +122,7 @@ export function LabSheet({ expId }: { expId: string }) {
       {expId === 'fm' && <FmObservations />}
       {expId === 'pam' && <PamObservations />}
       {expId === 'lc' && <LcObservations />}
+      {expId === 'mf' && <MfObservations />}
       {list('Theory notes', exp.theory)}
     </div>
   );

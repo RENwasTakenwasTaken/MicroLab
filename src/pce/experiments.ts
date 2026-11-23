@@ -4,6 +4,7 @@
 import { FM_APPARATUS, FM_OBJECTIVES, FM_PROCEDURE, FM_THEORY } from './fm/sheet.ts';
 import { PAM_APPARATUS, PAM_OBJECTIVES, PAM_PROCEDURE, PAM_THEORY } from './pam/sheet.ts';
 import { LC_APPARATUS, LC_OBJECTIVES, LC_PROCEDURE, LC_THEORY } from './lc/sheet.ts';
+import { MF_APPARATUS, MF_OBJECTIVES, MF_PROCEDURE, MF_THEORY } from './mf/sheet.ts';
 
 export interface PceExperiment {
   id: string;
@@ -88,7 +89,12 @@ export const PCE_EXPERIMENTS: PceExperiment[] = [
     title: 'Generate and compare line codes (NRZ, RZ, AMI, Manchester), sketch corresponding waveforms, and analyze bandwidth requirements.',
     objectives: LC_OBJECTIVES, apparatus: LC_APPARATUS, theory: LC_THEORY, procedure: LC_PROCEDURE,
   },
-  planned(6, 'CO3', 'Baseband receiver in noise (matched filter)', 'Generate baseband input bit sequences and evaluate receiver performance in noisy environments using appropriate hardware setup.', 'Matched filter kit'),
+  {
+    id: 'mf', no: 6, co: 'CO3', status: 'ready', kit: 'Sigma COM120L matched-filter trainer',
+    card: 'Baseband receiver in noise: Gaussian noise, integrate-and-dump (matched) filter',
+    title: 'Generate baseband input bit sequences and evaluate receiver performance in noisy environments using appropriate hardware setup.',
+    objectives: MF_OBJECTIVES, apparatus: MF_APPARATUS, theory: MF_THEORY, procedure: MF_PROCEDURE,
+  },
   planned(7, 'CO3', 'BFSK: ASK1, ASK2 and BFSK waveforms', 'Analyze BFSK modulation using block diagrams; generate ASK1, ASK2, BFSK waveforms, sketch input and carrier signals, and evaluate bandwidth using practical methods.', 'BFSK kit'),
   planned(8, 'CO3', 'Direct sequence spread spectrum: PN codes and DSSS signals', 'Demonstrate DSSS modulation; generate PN codes and DSSS signals using hardware setup and sketch the associated waveforms.', 'DSSS kit'),
 ];

@@ -13,3 +13,6 @@ release
 # local compiler bundles (never commit Microchip toolchains)
 xc8-*/
 *.atpack
+
+# local reference material for the PCE lab (extracted from the user's PDFs and videos; not for the repository)
+pce-reference/

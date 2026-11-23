@@ -28,7 +28,7 @@ await shot('landing');
 await page.click('.lab-card[href="#/pce"]');
 await page.waitForFunction(() => location.hash === '#/pce' && document.querySelectorAll('.exp-card:not(.lab-card)').length > 0);
 const cards = await page.$$eval('.exp-card', (els) => els.map((e) => [e.getAttribute('href'), e.classList.contains('planned')]));
-ok('PCE lab lists 8 experiments; Expts 1, 2, 3 and 5 are ready', cards.length === 8 && ['am', 'fm', 'pam', null, 'lc', null, null, null].every((id, i) => (id ? cards[i][0] === '#/pce/exp/' + id && !cards[i][1] : cards[i][1])), JSON.stringify(cards.slice(0, 5)));
+ok('PCE lab lists 8 experiments; Expts 1, 2, 3, 5 and 6 are ready', cards.length === 8 && ['am', 'fm', 'pam', null, 'lc', 'mf', null, null].every((id, i) => (id ? cards[i][0] === '#/pce/exp/' + id && !cards[i][1] : cards[i][1])), JSON.stringify(cards.slice(0, 5)));
 await shot('home');
 await page.goto('http://localhost:5173/#/ep');
 await page.waitForSelector('.whats-new');

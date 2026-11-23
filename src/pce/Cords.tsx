@@ -41,7 +41,8 @@ export function plugPose(p: PcePlug, plugs: Plugs, carrying: string | null): Pos
       return { pos: V(p.rest[0], DESK_Y + 4.8, p.rest[2]), dir: V(0.28, 0, 1).normalize() };
     case 'sleeve': {
       if (carried) return { pos: carryPos.clone(), dir: UP.clone() };
-      if (s) return { pos: V(s.pos[0], s.pos[1] - (AM_LEVEL.pin - AM_LEVEL.acrylic) + 1, s.pos[2]), dir: UP.clone() };
+      // over a pin the sleeve slides down to the cover; in a flush 2 mm socket the plug sits on its rim
+      if (s) return { pos: V(s.pos[0], s.noClip ? s.pos[1] - 1.5 : s.pos[1] - (AM_LEVEL.pin - AM_LEVEL.acrylic) + 1, s.pos[2]), dir: UP.clone() };
       const pos = V(p.rest[0], DESK_Y + 2.6, p.rest[2]);
       const far = plugs[p.id.endsWith(':a') ? `${p.cable}:b` : `${p.cable}:a`];
       return { pos, dir: flat(V(far.rest[0], 0, far.rest[2]).sub(pos)) };

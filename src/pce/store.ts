@@ -8,6 +8,7 @@ import { AM_BENCH } from './am/bench.ts';
 import { FM_BENCH } from './fm/bench.ts';
 import { PAM_BENCH } from './pam/bench.ts';
 import { LC_BENCH } from './lc/bench.ts';
+import { MF_BENCH } from './mf/bench.ts';
 import type { KitBench, KitId, PcePlug, V3 } from './kit.ts';
 import { SOCKET, dist, useSockets } from './world.ts';
 import { initialScope, type ScopeState } from './scope/state.ts';
@@ -20,9 +21,9 @@ export type DmmMode = 'V' | 'OHM' | 'HZ' | 'UA' | 'MA' | 'A' | 'TEMP';
 export const DMM_MODES: DmmMode[] = ['V', 'OHM', 'HZ', 'UA', 'MA', 'A', 'TEMP'];
 export interface DmmState { on: boolean; mode: DmmMode; ac: boolean }
 
-export const BENCH: Record<KitId, KitBench> = { am: AM_BENCH, fm: FM_BENCH, pam: PAM_BENCH, lc: LC_BENCH };
+export const BENCH: Record<KitId, KitBench> = { am: AM_BENCH, fm: FM_BENCH, pam: PAM_BENCH, lc: LC_BENCH, mf: MF_BENCH };
 /** Which kit each experiment puts on the bench. */
-export const KIT_OF: Record<string, KitId> = { am: 'am', fm: 'fm', pam: 'pam', lc: 'lc' };
+export const KIT_OF: Record<string, KitId> = { am: 'am', fm: 'fm', pam: 'pam', lc: 'lc', mf: 'mf' };
 /** A probe's ground lead reaches this far from its tip. */
 export const GND_LEAD = 120;
 /** Banana plugs stack: this many fit one socket. */

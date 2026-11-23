@@ -2,7 +2,7 @@
 // with it, and where its controls start. Each kit folder (am/, fm/) fills one of these in.
 
 export type V3 = [number, number, number];
-export type KitId = 'am' | 'fm' | 'pam' | 'lc';
+export type KitId = 'am' | 'fm' | 'pam' | 'lc' | 'mf';
 
 /** pin: 2 mm hollow rod (AM kit) · jack: 4 mm banana socket · ac: wall socket */
 export type SocketKind = 'pin' | 'jack' | 'ac';

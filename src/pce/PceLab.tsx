@@ -30,6 +30,9 @@ import { usePamSetup } from './pam/setup.tsx';
 import { LcKit } from './lc/LcKit.tsx';
 import { panelToWorld as lcPanelToWorld } from './lc/layout.ts';
 import { useLcSetup } from './lc/setup.tsx';
+import { MfKit } from './mf/MfKit.tsx';
+import { panelToWorld as mfPanelToWorld } from './mf/layout.ts';
+import { useMfSetup } from './mf/setup.tsx';
 import { BenchCords, CarryController, SocketTargets, carryPos } from './Cords.tsx';
 import { scopeLive } from './scope/menus.ts';
 import { Tds1002 } from './scope/Tds1002.tsx';
@@ -88,7 +91,7 @@ function DevProbe() {
     if (!import.meta.env.DEV) return;
     (window as unknown as { __pce3d: unknown }).__pce3d = {
       /** world position of a panel point (mm, height above the panel) and of a point on the scope's face */
-      panel: panelToWorld, fmPanel: fmPanelToWorld, pamPanel: pamPanelToWorld, lcPanel: lcPanelToWorld, scope: scopePoint,
+      panel: panelToWorld, fmPanel: fmPanelToWorld, pamPanel: pamPanelToWorld, lcPanel: lcPanelToWorld, mfPanel: mfPanelToWorld, scope: scopePoint,
       project(p: [number, number, number]) {
         const v = new THREE.Vector3(...p).project(camera);
         const r = gl.domElement.getBoundingClientRect();
@@ -138,11 +141,12 @@ function AmGuide() { return <SetupPanel data={useAmSetup()} />; }
 function FmGuide() { return <SetupPanel data={useFmSetup()} />; }
 function PamGuide() { return <SetupPanel data={usePamSetup()} />; }
 function LcGuide() { return <SetupPanel data={useLcSetup()} />; }
+function MfGuide() { return <SetupPanel data={useMfSetup()} />; }
 
 /** The trainer for the experiment, and the instruments that go with it. */
 function KitOnBench() {
   const kit = usePce((s) => s.kit);
-  return kit === 'fm' ? <><FmKit /><Dmm /></> : kit === 'pam' ? <PamKit /> : kit === 'lc' ? <LcKit /> : <AmKit />;
+  return kit === 'fm' ? <><FmKit /><Dmm /></> : kit === 'pam' ? <PamKit /> : kit === 'lc' ? <LcKit /> : kit === 'mf' ? <MfKit /> : <AmKit />;
 }
 const CAMERA = { position: [170, 640, 1150] as [number, number, number], fov: 32, near: 2, far: 9000 };
 const WALL_INFO = 'Switchboard on the wall behind the bench. Put the kit\'s mains plug in the socket, then switch the kit ON with its own toggle.';
@@ -215,7 +219,7 @@ export function PceLab() {
           </button>
         </div>
       </div>
-      {kit === 'fm' ? <FmGuide /> : kit === 'pam' ? <PamGuide /> : kit === 'lc' ? <LcGuide /> : <AmGuide />}
+      {kit === 'fm' ? <FmGuide /> : kit === 'pam' ? <PamGuide /> : kit === 'lc' ? <LcGuide /> : kit === 'mf' ? <MfGuide /> : <AmGuide />}
       {gpu.software && <GpuNotice renderer={gpu.renderer} />}
       <CarryHint />
       <Toast />
