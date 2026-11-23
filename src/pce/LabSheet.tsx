@@ -6,6 +6,8 @@ import { Icon } from '../ui/icons.tsx';
 import { MathText } from '../ui/MathText.tsx';
 import { getPceExperiment } from './experiments.ts';
 import { FmObservations } from './fm/Observations.tsx';
+import { PamObservations } from './pam/Observations.tsx';
+import { LcObservations } from './lc/Observations.tsx';
 
 const LS = 'vlab.pce.am.obs.v1';
 const CASES = ['m < 1', 'm = 1', 'm > 1'];
@@ -117,6 +119,8 @@ export function LabSheet({ expId }: { expId: string }) {
       {list('Procedure', exp.procedure, true)}
       {expId === 'am' && <Observations />}
       {expId === 'fm' && <FmObservations />}
+      {expId === 'pam' && <PamObservations />}
+      {expId === 'lc' && <LcObservations />}
       {list('Theory notes', exp.theory)}
     </div>
   );

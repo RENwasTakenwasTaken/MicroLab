@@ -18,8 +18,8 @@ function plugs(): Record<string, PcePlug> {
   add('ch1g', 'banana', 'CH1 lead, black plug (ground)', 'ch1', [118, Y, 176], BLACK);
   add('ch2', 'banana', 'CH2 lead, red plug (signal)', 'ch2', [150, Y, 132], RED);
   add('ch2g', 'banana', 'CH2 lead, black plug (ground)', 'ch2', [172, Y, 158], BLACK);
-  add('dmm:v', 'banana', 'Multimeter red lead (V)', 'dmm', [150, Y, 268], RED);
-  add('dmm:com', 'banana', 'Multimeter black lead (COM)', 'dmm', [118, Y, 284], BLACK);
+  add('dmm:v', 'banana', 'Multimeter red lead (V)', 'dmm', [136, Y, 262], RED);
+  add('dmm:com', 'banana', 'Multimeter black lead (COM)', 'dmm', [112, Y, 284], BLACK);
   const rests: V3[] = [[-250, Y, 232], [-196, Y, 250], [-150, Y, 236], [-92, Y, 256], [-48, Y, 234], [14, Y, 252]];
   CORDS.forEach((c, i) => {
     add(`${c.id}:a`, 'banana', `${c.name}, end A`, c.id, rests[i * 2], RED);

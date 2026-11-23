@@ -50,10 +50,10 @@ function App() {
 
 if (import.meta.env.DEV) {
   // automation hooks for the UI tests (dev server only)
-  Promise.all([import('./app/bench.ts'), import('./app/sim.ts'), import('./app/store.ts'), import('./pce/store.ts'), import('./pce/signals.ts'), import('./pce/fm/signals.ts'), import('./pce/Dmm.tsx')]).then(([bench, simMod, store, pce, signals, fm, dmm]) => {
+  Promise.all([import('./app/bench.ts'), import('./app/sim.ts'), import('./app/store.ts'), import('./pce/store.ts'), import('./pce/signals.ts'), import('./pce/fm/signals.ts'), import('./pce/Dmm.tsx'), import('./pce/pam/signals.ts'), import('./pce/lc/signals.ts')]).then(([bench, simMod, store, pce, signals, fm, dmm, pam, lc]) => {
     const w = window as unknown as { __vlab: unknown; __pce: unknown };
     w.__vlab = { bench: bench.useBench, sim: simMod.sim, frame: store.useFrame, lab: store.useLab };
-    w.__pce = { store: pce.usePce, signals, fm, dmm: dmm.dmmLive };
+    w.__pce = { store: pce.usePce, signals, fm, pam, lc, dmm: dmm.dmmLive };
   });
 }
 

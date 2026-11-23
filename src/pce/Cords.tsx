@@ -273,6 +273,12 @@ function AmKitCord() {
   return <mesh geometry={geo} material={PM.black} castShadow />;
 }
 
+/** Fixed part of a kit's mains cord, along the points its bench data gives. */
+function FixedCord({ pts }: { pts: [number, number, number][] }) {
+  const geo = useMemo(() => new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map((p) => V(...p)), false, 'centripetal'), 48, 2.4, 8, false), [pts]);
+  return <mesh geometry={geo} material={PM.black} castShadow />;
+}
+
 const pose = (id: string, ps: Plugs, c: string | null) => plugPose(ps[id], ps, c);
 const up = (d: THREE.Vector3, by: number) => d.clone().setY(d.y + by).normalize();
 const mainsRun: RunOf = (ps, c) => {
@@ -289,6 +295,7 @@ const cordRun = (id: string, len: number): RunOf => (ps, c) => {
 export function BenchCords() {
   const plugs = usePce((s) => s.plugs);
   const kit = usePce((s) => s.kit);
+  const probes = !!BENCH[kit].probes, path = BENCH[kit].cordPath;
   const scopeOut = useMemo(() => { const a = scopePoint(0, 0, 0), b = scopePoint(0, 0, 1); return V(b[0] - a[0], 0.25, b[2] - a[2]).normalize(); }, []);
   const bnc = (id: 'ch1' | 'ch2') => V(...scopePoint(BNC[id][0], BNC[id][1], 24));
   // AM kit: probe cable to the back of the probe, and its ground lead from the probe body to the clip
@@ -303,22 +310,25 @@ export function BenchCords() {
   return (
     <group>
       <Cable run={mainsRun} color="#1c1c1e" radius={2.4} />
-      {kit === 'am' && <>
-        <AmKitCord />
+      {kit === 'am' && <AmKitCord />}
+      {!!path && <FixedCord pts={path} />}
+      {probes && <>
         <Cable run={probe('ch1')} color="#2e3238" radius={1.9} />
         <Cable run={probe('ch2')} color="#2e3238" radius={1.9} />
         <Cable run={lead('ch1')} color="#151515" radius={1.1} />
         <Cable run={lead('ch2')} color="#151515" radius={1.1} />
       </>}
-      {kit === 'fm' && <>
+      {!probes && <>
         {(['ch1', 'ch2'] as const).map((id) => [
           <Cable key={id} run={from(() => bnc(id), scopeOut, id)} color="#c8302b" radius={1.5} />,
           <Cable key={`${id}g`} run={from(() => bnc(id), scopeOut, `${id}g`)} color="#1b1b1d" radius={1.5} />,
         ])}
+      </>}
+      {!!plugs['dmm:v'] && <>
         <Cable run={from(() => V(...dmmJack('v')), meterOut, 'dmm:v')} color="#c8302b" radius={1.5} />
         <Cable run={from(() => V(...dmmJack('com')), meterOut, 'dmm:com')} color="#1b1b1d" radius={1.5} />
       </>}
-      {BENCH[kit].cords.map((c) => <Cable key={`${kit}${c.id}`} run={cordRun(c.id, kit === 'am' ? LEN.sleeve : LEN.banana)} color={c.wire} radius={kit === 'am' ? 1.25 : 1.5} />)}
+      {BENCH[kit].cords.map((c) => <Cable key={`${kit}${c.id}`} run={cordRun(c.id, probes ? LEN.sleeve : LEN.banana)} color={c.wire} radius={probes ? 1.25 : 1.5} />)}
       {Object.values(plugs).map((p) => <PlugMesh key={`${kit}${p.id}`} p={p} />)}
     </group>
   );

@@ -3,13 +3,16 @@
 
 import * as am from './am/signals.ts';
 import * as fm from './fm/signals.ts';
+import * as pam from './pam/signals.ts';
+import * as lc from './lc/signals.ts';
 import { usePce } from './store.ts';
 import type { Source } from './wiring.ts';
 
 export { now } from './wiring.ts';
 export type { Source } from './wiring.ts';
 
-const model = () => (usePce.getState().kit === 'fm' ? fm : am);
+const MODELS = { am, fm, pam, lc };
+const model = () => MODELS[usePce.getState().kit];
 
 /** Bring the kit's oscillators up to date with its knobs and power switch. Call before reading signals. */
 export const syncKit = (t?: number) => { model().syncKit(t); };

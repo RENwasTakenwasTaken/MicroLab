@@ -13,6 +13,7 @@ export function useFmSetup(): GuideData {
   const powerSw = usePce((s) => s.powerSw);
   const knobs = usePce((s) => s.knobs);
   const scope = usePce((s) => s.scope);
+  const dmm = usePce((s) => s.dmm);
   const c = circuit(plugs), v = kitValues(knobs);
   const locked = syncKit().locked;
   const mains = plugs.mains.attachedTo === 'wall', power = mains && powerSw;
@@ -37,6 +38,11 @@ export function useFmSetup(): GuideData {
   if ((c.ch1 || c.ch2) && !c.scopeGnd) warn.push(c.groundOff ? 'A black oscilloscope lead is in a socket that is not GND: it ties that point to the ground of the oscilloscope. Move it to the GND socket.' : 'The oscilloscope has no ground on the kit: the trace is mostly mains hum. Put a black lead in the GND socket (the plugs stack).');
   if (c.shorts.length) warn.push(`A cord shorts ${c.shorts.map((n) => SHORT_NAME[n]).join(' and ')} to ground.`);
   if ((c.dmmV || c.dmmCom) && !(c.dmmV && c.dmmCom)) warn.push('The multimeter reads nothing with one lead: red to DC BIAS, black to GND.');
+  if (c.dmmV && c.dmmCom) {
+    if (!dmm.on) warn.push('The multimeter is switched off: press its POWER button.');
+    else if (dmm.mode !== 'V') warn.push('The multimeter dial is not on volts: click the dial until it points to V (right-click turns it back).');
+    else if (dmm.ac) warn.push('The multimeter is on AC volts, so the DC bias reads about 0: press SELECT for DC.');
+  }
   warn.push(...scopeWarnings([!!c.ch1, !!c.ch2]));
   if (power && c.pllFed && !locked) warn.push('The PLL is not locked: its free-running frequency is too far from the carrier. Bring both to 50 kHz.');
   const go = (view: 'scope' | 'dmm') => () => usePce.getState().setView(view);

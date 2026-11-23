@@ -15,10 +15,10 @@ export const BNC = { ch1: [28, -52], ch2: [68, -52], ext: [108, -52] } as const;
 export const scopePoint = (x: number, y: number, out = 0): V3 =>
   rotateY([x, SCOPE.h / 2 + 4 + y, SCOPE.d / 2 + out], SCOPE.rotY, SCOPE.pos);
 
-/** Hand-held multimeter lying in front of the oscilloscope (kits that need one). */
-export const DMM = { pos: [215, DESK_Y, 215] as V3, rotY: -0.3 };
-/** Top of the meter's COM and V jacks, where its leads leave. */
-export const dmmJack = (which: 'com' | 'v'): V3 => rotateY([which === 'com' ? -9 : 12, 30, 64], DMM.rotY, DMM.pos);
+/** MECO 801 multimeter lying in front of the oscilloscope (kits that need one). */
+export const DMM = { pos: [228, DESK_Y, 196] as V3, rotY: -0.3 };
+/** The meter's COM and V jacks, where its leads leave. */
+export const dmmJack = (which: 'com' | 'v'): V3 => rotateY([which === 'com' ? 8 : 29, 22, 80], DMM.rotY, DMM.pos);
 
 /** Switchboard on the wall behind the bench, far enough left to be seen past the kit's open lid: the kit's mains plug goes here. */
 export const WALL_POS: V3 = [-560, DESK_Y + 235, -520];

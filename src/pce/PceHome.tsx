@@ -27,7 +27,7 @@ export function PceHome() {
           <h1>PCE Lab.</h1>
           <p>
             Every practical here has its own trainer kit, rebuilt in 3D from the lab&apos;s kit photographs and videos, with the
-            oscilloscope beside it. The AM and FM kits are ready; the other kits will follow.
+            oscilloscope beside it. The AM, FM and sampling kits are ready; the other kits will follow.
           </p>
         </section>
         {Object.keys(CO_NAME).map((co) => (

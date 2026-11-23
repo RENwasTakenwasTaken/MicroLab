@@ -183,6 +183,23 @@ export function dmmVolts(): number | null {
   return va === null || vb === null ? null : va - vb;
 }
 
+/** AC volts (RMS of the changing part) between the multimeter's leads, and the frequency at its red lead. */
+export function dmmAc(): { volts: number | null; hz: number } {
+  const plugs = usePce.getState().plugs;
+  const a = nodeOf(plugs, 'dmm:v'), b = nodeOf(plugs, 'dmm:com');
+  if (!a) return { volts: null, hz: 0 };
+  const w = wiring(plugs), ga = w.group.get(a)!;
+  let hz = 0;
+  for (const n of w.sources[ga]) hz = Math.max(hz, rates(w, n)[0]);
+  if (!b) return { volts: null, hz };
+  const gb = w.group.get(b)!, da = dcOf(w, ga), db = dcOf(w, gb);
+  if (da === null || db === null) return { volts: null, hz };
+  const t0 = now();
+  let sq = 0;
+  for (let i = 0; i < 1200; i++) { const t = t0 - 0.04 * ((i * 0.6180339887) % 1); const v = (vGroup(w, ga, t) ?? 0) - (vGroup(w, gb, t) ?? 0) - (da - db); sq += v * v; }
+  return { volts: Math.sqrt(sq / 1200), hz };
+}
+
 /** How the bench is wired, for the setup guide and its hints. */
 export function circuit(plugs: Record<string, PcePlug> = usePce.getState().plugs) {
   const w = wiring(plugs);

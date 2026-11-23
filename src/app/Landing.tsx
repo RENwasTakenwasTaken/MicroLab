@@ -17,7 +17,7 @@ export function Landing() {
     {
       href: '#/pce', icon: 'wave', code: 'PCE', name: 'PCE Lab', sub: 'Principles of Communication Engineering',
       text: 'Communication trainer kits with the oscilloscope: patch the kit, set the signals and read waveforms, trapezoid patterns and spectra.',
-      chips: [`${ready(PCE_EXPERIMENTS)} of ${PCE_EXPERIMENTS.length} experiments`, 'AM kit', 'FM kit'],
+      chips: [`${ready(PCE_EXPERIMENTS)} of ${PCE_EXPERIMENTS.length} experiments`, 'AM', 'FM', 'Sampling', 'Line codes'],
     },
   ];
   return (

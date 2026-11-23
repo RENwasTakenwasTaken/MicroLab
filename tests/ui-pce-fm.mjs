@@ -66,6 +66,9 @@ ok('bias + 0.5 V gives 55 kHz', near(await meter(), 8.55, 0.02) && near(a.f, 55e
 await knob('modFreq', 20 / 60); await sleep(400); a = await acq();
 ok('bias - 0.5 V gives 45 kHz', near(await meter(), 7.55, 0.02) && near(a.f, 45e3, 300), `${a.f}`);
 await knob('modFreq', 25 / 60);
+await st((s) => s.getState().setDmm({ ac: true })); await sleep(700);
+ok('meter on AC volts: no DC reading, and the guide says to press SELECT', (await page.evaluate(() => window.__pce.dmm.volts)) === null && await page.$$eval('.pce-warn', (els) => els.some((e) => /SELECT for DC/.test(e.textContent))));
+await st((s) => s.getState().setDmm({ ac: false }));
 ok('three plugs stack in GND, a fourth does not', (await attach('ch2g', 'gnd')) === true && (await attach('p3:a', 'gnd')) === false);
 await attach('p1:a', 'sg.out'); await attach('p1:b', 'mod.in');
 const k = await page.evaluate(() => window.__pce.fm.syncKit());

@@ -11,12 +11,10 @@ import { StaticBatch } from '../three/perf.tsx';
 import panelUrl from './am/panel.jpg';
 import { BLOCK_NAME, BOX, CORD_ENTRY, KIT_POS, KNOBS, LEVEL, NEON, PANEL, PARTS, PINS, PIN, POWER_SW, SCREWS, SWEEP, type BlockId, type KnobDef, type PartDef } from './am/layout.ts';
 import { busy, useOrbitLock, useZoomLock } from './parts3d.tsx';
+import { KitCase, type CaseDims } from './sigma3d.tsx';
 import { kitPowered, usePce } from './store.ts';
 
 const M = {
-  wood: new THREE.MeshStandardMaterial({ color: '#d2ac74', roughness: 0.7 }),
-  woodIn: new THREE.MeshStandardMaterial({ color: '#c9a36b', roughness: 0.8 }),
-  frame: new THREE.MeshStandardMaterial({ color: '#17181a', roughness: 0.6 }),
   dark: new THREE.MeshStandardMaterial({ color: '#0f1011', roughness: 0.9 }),
   acrylic: new THREE.MeshStandardMaterial({ color: '#e6f4ff', transparent: true, opacity: 0.16, roughness: 0.06, metalness: 0.1, depthWrite: false }),
   steel: new THREE.MeshStandardMaterial({ color: '#c5c9ce', metalness: 0.6, roughness: 0.32 }),
@@ -35,26 +33,6 @@ const M = {
 
 /** Panel mm -> the kit's own frame (origin: centre of the box on the desk). */
 const at = (x: number, y: number, h = 0): [number, number, number] => [x - PANEL.w / 2, LEVEL.panel + h, y - PANEL.h / 2];
-
-/** Light wood with a darker grain, for the box and lid. */
-function woodTexture() {
-  const c = document.createElement('canvas');
-  c.width = 512; c.height = 128;
-  const g = c.getContext('2d')!;
-  g.fillStyle = '#d6b27c'; g.fillRect(0, 0, 512, 128);
-  for (let i = 0; i < 90; i++) {
-    const y = Math.random() * 128;
-    g.strokeStyle = `rgba(120, 82, 40, ${0.05 + Math.random() * 0.14})`;
-    g.lineWidth = 0.6 + Math.random() * 1.6;
-    g.beginPath(); g.moveTo(0, y);
-    for (let x = 0; x <= 512; x += 32) g.lineTo(x, y + Math.sin(x / 70 + i) * 2.5);
-    g.stroke();
-  }
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  return t;
-}
 
 /** One fixed component as a simple solid. */
 function Part({ p }: { p: PartDef }) {
@@ -259,37 +237,15 @@ function BlockArea({ b }: { b: (typeof BLOCKS)[number] }) {
 
 // ------------------------------------------------------------ the kit
 const ACRYLIC = { w: 313, d: 249, t: 3 };
-const LID = { h: 44, open: (102 * Math.PI) / 180 };
+const CASE: CaseDims = { box: BOX, panel: LEVEL.panel, acrylic: ACRYLIC, lid: { h: 44, open: (102 * Math.PI) / 180 } };
 
 export function AmKit() {
   const panel = useLoader(THREE.TextureLoader, panelUrl);
   useMemo(() => { panel.colorSpace = THREE.SRGBColorSpace; panel.anisotropy = 8; }, [panel]);
-  const wood = useMemo(() => { const t = woodTexture(); M.wood.map = t; M.woodIn.map = t; M.wood.needsUpdate = M.woodIn.needsUpdate = true; return t; }, []);
-  useEffect(() => () => wood.dispose(), [wood]);
-  const { w, d, h } = BOX;
-  const fw = (w - ACRYLIC.w) / 2, fd = (d - ACRYLIC.d) / 2, fh = h - LEVEL.panel;
-  const body = useHover({ name: 'AM trainer kit (Sigma COM101)', info: 'Wooden box with the lid open behind it. The panel is a circuit diagram with the parts mounted on it, under an acrylic cover: only the pins, pots and the mains toggle come through.' });
   return (
     <group position={KIT_POS}>
       <StaticBatch>
-        <group {...body}>
-          <mesh position={[0, (LEVEL.panel - 2) / 2, 0]} castShadow receiveShadow material={M.wood}><boxGeometry args={[w, LEVEL.panel - 2, d]} /></mesh>
-          {/* black top frame around the cover */}
-          <mesh position={[0, LEVEL.panel + fh / 2, -(d - fd) / 2]} castShadow material={M.frame}><boxGeometry args={[w, fh, fd]} /></mesh>
-          <mesh position={[0, LEVEL.panel + fh / 2, (d - fd) / 2]} castShadow material={M.frame}><boxGeometry args={[w, fh, fd]} /></mesh>
-          <mesh position={[-(w - fw) / 2, LEVEL.panel + fh / 2, 0]} castShadow material={M.frame}><boxGeometry args={[fw, fh, ACRYLIC.d]} /></mesh>
-          <mesh position={[(w - fw) / 2, LEVEL.panel + fh / 2, 0]} castShadow material={M.frame}><boxGeometry args={[fw, fh, ACRYLIC.d]} /></mesh>
-          <mesh position={[0, LEVEL.panel - 1, 0]} rotation={[-Math.PI / 2, 0, 0]} material={M.dark}><planeGeometry args={[w - 2, d - 2]} /></mesh>
-          {/* lid, hinged along the back edge and leaning back */}
-          <group position={[0, h, -d / 2]} rotation={[-LID.open, 0, 0]}>
-            <mesh position={[0, LID.h - 3, d / 2]} castShadow material={M.wood}><boxGeometry args={[w, 6, d]} /></mesh>
-            <mesh position={[0, LID.h / 2, 3]} castShadow material={M.wood}><boxGeometry args={[w, LID.h, 6]} /></mesh>
-            <mesh position={[0, LID.h / 2, d - 3]} castShadow material={M.wood}><boxGeometry args={[w, LID.h, 6]} /></mesh>
-            <mesh position={[-w / 2 + 3, LID.h / 2, d / 2]} castShadow material={M.wood}><boxGeometry args={[6, LID.h, d - 12]} /></mesh>
-            <mesh position={[w / 2 - 3, LID.h / 2, d / 2]} castShadow material={M.wood}><boxGeometry args={[6, LID.h, d - 12]} /></mesh>
-            <mesh position={[0, LID.h - 6.2, d / 2]} rotation={[Math.PI / 2, 0, 0]} material={M.woodIn}><planeGeometry args={[w - 12, d - 12]} /></mesh>
-          </group>
-        </group>
+        <KitCase dims={CASE} name="AM trainer kit (Sigma COM101)" info="Wooden box with the lid open behind it. The panel is a circuit diagram with the parts mounted on it, under an acrylic cover: only the pins, pots and the mains toggle come through." />
         {PARTS.map((p, i) => <Part key={i} p={p} />)}
         {SCREWS.map(([x, y], i) => <mesh key={i} position={at(x, y, LEVEL.acrylic - LEVEL.panel + 0.7)} material={M.steel}><cylinderGeometry args={[2.6, 2.6, 1.4, 14]} /></mesh>)}
         {/* mains cord: out through the cover near the front-left corner and over the frame */}

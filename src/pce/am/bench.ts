@@ -36,7 +36,7 @@ const sockets: SocketDef[] = [
 ];
 
 export const AM_BENCH: KitBench = {
-  sockets, cords: CORDS, plugs,
+  sockets, cords: CORDS, plugs, probes: true,
   // pots wherever the last batch left them
   knobs: { agAmp: 0.16, agFreq: 0.58, rfFreq: 0.34, rfAmp: 0.47 },
   cordFoot: [KIT_POS[0] - BOX.w / 2 - 22, DESK_Y + 3.4, KIT_POS[2] + CORD_ENTRY.y - PANEL.h / 2 + 4],
