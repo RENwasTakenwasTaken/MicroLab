@@ -7,6 +7,7 @@ import { LC_APPARATUS, LC_OBJECTIVES, LC_PROCEDURE, LC_THEORY } from './lc/sheet
 import { MF_APPARATUS, MF_OBJECTIVES, MF_PROCEDURE, MF_THEORY } from './mf/sheet.ts';
 import { FSK_APPARATUS, FSK_OBJECTIVES, FSK_PROCEDURE, FSK_THEORY } from './fsk/sheet.ts';
 import { SS_APPARATUS, SS_OBJECTIVES, SS_PROCEDURE, SS_THEORY } from './dsss/sheet.ts';
+import { PCM_APPARATUS, PCM_OBJECTIVES, PCM_PROCEDURE, PCM_THEORY } from './pcm/sheet.ts';
 
 export interface PceExperiment {
   id: string;
@@ -23,9 +24,6 @@ export interface PceExperiment {
   theory: string[];
   procedure: string[];
 }
-
-const planned = (no: number, co: string, card: string, title: string, kit: string): PceExperiment =>
-  ({ id: `p${no}`, no, co, status: 'planned', title, card, kit, objectives: [], apparatus: [], theory: [], procedure: [] });
 
 const AM_THEORY = [
   'Modulating signal $e_m = E_m cos ω_m t$, carrier $e_c = E_c cos ω_c t$.',
@@ -84,7 +82,12 @@ export const PCE_EXPERIMENTS: PceExperiment[] = [
     title: 'Apply the Sampling Theorem to generate PAM (natural and flat-top) signals, reconstruct the original waveform, and evaluate aliasing effects in the frequency domain.',
     objectives: PAM_OBJECTIVES, apparatus: PAM_APPARATUS, theory: PAM_THEORY, procedure: PAM_PROCEDURE,
   },
-  planned(4, 'CO2', 'PCM system: waveforms, signalling rate and bandwidth', 'Construct and analyze a PCM system, sketch PCM waveforms, and compute signaling rate and bandwidth.', 'PCM kit'),
+  {
+    id: 'pcm', no: 4, co: 'CO2', status: 'ready', kit: 'Sigma COM110M PCM trainer',
+    card: 'PCM system: sampling, quantisation, the PCM frame, raw data and filtered output; signalling rate and bandwidth',
+    title: 'Construct and analyze a PCM system, sketch PCM waveforms, and compute signaling rate and bandwidth.',
+    objectives: PCM_OBJECTIVES, apparatus: PCM_APPARATUS, theory: PCM_THEORY, procedure: PCM_PROCEDURE,
+  },
   {
     id: 'lc', no: 5, co: 'CO2', status: 'ready', kit: 'Sigma COM122N line-code trainer',
     card: 'Line codes: NRZ, RZ, AMI and Manchester',

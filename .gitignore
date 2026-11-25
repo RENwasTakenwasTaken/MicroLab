@@ -16,3 +16,6 @@ xc8-*/
 
 # local reference material for the PCE lab (extracted from the user's PDFs and videos; not for the repository)
 pce-reference/
+
+# stills and data for the promotional video (made by tools/film/capture.mjs)
+film/

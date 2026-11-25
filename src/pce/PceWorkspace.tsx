@@ -8,6 +8,7 @@ import { Icon } from '../ui/icons.tsx';
 import { LabSheet } from './LabSheet.tsx';
 import { getPceExperiment } from './experiments.ts';
 import { kitPowered, resetPceBench, usePce } from './store.ts';
+import { FILM } from './film.ts';
 
 const PceLab = lazy(() => import('./PceLab.tsx').then((m) => ({ default: m.PceLab })));
 
@@ -53,6 +54,7 @@ export function PceWorkspace({ expId }: { expId: string }) {
   const [tab, setTab] = useState<'bench' | 'sheet'>('bench');
   // every visit starts with a fresh bench, as at the start of a lab turn
   useEffect(() => { resetPceBench(expId); }, [expId]);
+  if (FILM) return <div style={{ position: 'fixed', inset: 0, background: '#000' }}><Bench /></div>;
   if (narrow) {
     return (
       <div className="ws">

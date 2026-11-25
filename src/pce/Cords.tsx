@@ -10,6 +10,7 @@ import { useHover } from '../three/interactive.tsx';
 import { BOX as AM_BOX, CORD_ENTRY, LEVEL as AM_LEVEL, PANEL } from './am/layout.ts';
 import type { PcePlug } from './kit.ts';
 import { BENCH, usePce } from './store.ts';
+import { FILM } from './film.ts';
 import { BNC, KIT_POS, SOCKET, SOCKETS, dmmJack, scopePoint, type SocketDef } from './world.ts';
 
 type Plugs = Record<string, PcePlug>;
@@ -76,6 +77,8 @@ export function plugPose(p: PcePlug, plugs: Plugs, carrying: string | null): Pos
     }
     default:
       if (carried) return { pos: carryPos.clone(), dir: V(0, 0, 1) };
+      // film mode has no wall: the plugged-in mains plug lies far off to the left, so its cable runs out of the picture
+      if (s && FILM) return { pos: V(KIT_POS[0] - 2600, DESK_Y + 9, KIT_POS[2] + 60), dir: V(-1, 0, 0) };
       if (s) return { pos: V(...s.pos), dir: V(0, 0, 1) };
       return { pos: V(...p.rest), dir: V(0.5, 0, 0.87).normalize() };
   }

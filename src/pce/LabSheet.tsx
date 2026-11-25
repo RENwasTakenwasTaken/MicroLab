@@ -11,6 +11,7 @@ import { LcObservations } from './lc/Observations.tsx';
 import { MfObservations } from './mf/Observations.tsx';
 import { FskObservations } from './fsk/Observations.tsx';
 import { DsssObservations } from './dsss/Observations.tsx';
+import { PcmObservations } from './pcm/Observations.tsx';
 
 const LS = 'vlab.pce.am.obs.v1';
 const CASES = ['m < 1', 'm = 1', 'm > 1'];
@@ -127,6 +128,7 @@ export function LabSheet({ expId }: { expId: string }) {
       {expId === 'mf' && <MfObservations />}
       {expId === 'fsk' && <FskObservations />}
       {expId === 'dsss' && <DsssObservations />}
+      {expId === 'pcm' && <PcmObservations />}
       {list('Theory notes', exp.theory)}
     </div>
   );

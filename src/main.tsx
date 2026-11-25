@@ -50,10 +50,10 @@ function App() {
 
 if (import.meta.env.DEV) {
   // automation hooks for the UI tests (dev server only)
-  Promise.all([import('./app/bench.ts'), import('./app/sim.ts'), import('./app/store.ts'), import('./pce/store.ts'), import('./pce/signals.ts'), import('./pce/fm/signals.ts'), import('./pce/Dmm.tsx'), import('./pce/pam/signals.ts'), import('./pce/lc/signals.ts'), import('./pce/mf/signals.ts'), import('./pce/fsk/signals.ts'), import('./pce/dsss/signals.ts')]).then(([bench, simMod, store, pce, signals, fm, dmm, pam, lc, mf, fsk, dsss]) => {
+  Promise.all([import('./app/bench.ts'), import('./app/sim.ts'), import('./app/store.ts'), import('./pce/store.ts'), import('./pce/signals.ts'), import('./pce/fm/signals.ts'), import('./pce/Dmm.tsx'), import('./pce/pam/signals.ts'), import('./pce/lc/signals.ts'), import('./pce/mf/signals.ts'), import('./pce/fsk/signals.ts'), import('./pce/dsss/signals.ts'), import('./pce/pcm/signals.ts')]).then(([bench, simMod, store, pce, signals, fm, dmm, pam, lc, mf, fsk, dsss, pcm]) => {
     const w = window as unknown as { __vlab: unknown; __pce: unknown };
     w.__vlab = { bench: bench.useBench, sim: simMod.sim, frame: store.useFrame, lab: store.useLab };
-    w.__pce = { store: pce.usePce, signals, fm, pam, lc, mf, fsk, dsss, dmm: dmm.dmmLive };
+    w.__pce = { store: pce.usePce, signals, fm, pam, lc, mf, fsk, dsss, pcm, dmm: dmm.dmmLive };
   });
 }
 

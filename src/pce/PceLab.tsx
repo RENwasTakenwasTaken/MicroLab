@@ -6,6 +6,7 @@ import { Suspense, memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { audio } from '../app/audio.ts';
 import { useBench } from '../app/bench.ts';
 import { useLab } from '../app/store.ts';
@@ -39,10 +40,14 @@ import { useFskSetup } from './fsk/setup.tsx';
 import { DsssKit } from './dsss/DsssKit.tsx';
 import { panelToWorld as dsssPanelToWorld } from './dsss/layout.ts';
 import { useDsssSetup } from './dsss/setup.tsx';
+import { PcmKit } from './pcm/PcmKit.tsx';
+import { panelToWorld as pcmPanelToWorld } from './pcm/layout.ts';
+import { usePcmSetup } from './pcm/setup.tsx';
 import { BenchCords, CarryController, SocketTargets, carryPos } from './Cords.tsx';
 import { scopeLive } from './scope/menus.ts';
 import { Tds1002 } from './scope/Tds1002.tsx';
 import { usePce, type PceView } from './store.ts';
+import { FILM } from './film.ts';
 import { DMM, KIT_POS, SCOPE, WALL_POS, scopePoint } from './world.ts';
 import '../three/board.css';
 import '../lab3d/lab.css';
@@ -97,7 +102,7 @@ function DevProbe() {
     if (!import.meta.env.DEV) return;
     (window as unknown as { __pce3d: unknown }).__pce3d = {
       /** world position of a panel point (mm, height above the panel) and of a point on the scope's face */
-      panel: panelToWorld, fmPanel: fmPanelToWorld, pamPanel: pamPanelToWorld, lcPanel: lcPanelToWorld, mfPanel: mfPanelToWorld, fskPanel: fskPanelToWorld, dsssPanel: dsssPanelToWorld, scope: scopePoint,
+      panel: panelToWorld, fmPanel: fmPanelToWorld, pamPanel: pamPanelToWorld, lcPanel: lcPanelToWorld, mfPanel: mfPanelToWorld, fskPanel: fskPanelToWorld, dsssPanel: dsssPanelToWorld, pcmPanel: pcmPanelToWorld, scope: scopePoint,
       project(p: [number, number, number]) {
         const v = new THREE.Vector3(...p).project(camera);
         const r = gl.domElement.getBoundingClientRect();
@@ -150,20 +155,41 @@ function LcGuide() { return <SetupPanel data={useLcSetup()} />; }
 function MfGuide() { return <SetupPanel data={useMfSetup()} />; }
 function FskGuide() { return <SetupPanel data={useFskSetup()} />; }
 function DsssGuide() { return <SetupPanel data={useDsssSetup()} />; }
+function PcmGuide() { return <SetupPanel data={usePcmSetup()} />; }
 
 /** The trainer for the experiment, and the instruments that go with it. */
 function KitOnBench() {
   const kit = usePce((s) => s.kit);
-  return kit === 'fm' ? <><FmKit /><Dmm /></> : kit === 'pam' ? <PamKit /> : kit === 'lc' ? <LcKit /> : kit === 'mf' ? <MfKit /> : kit === 'fsk' ? <FskKit /> : kit === 'dsss' ? <DsssKit /> : <AmKit />;
+  return kit === 'fm' ? <><FmKit /><Dmm /></> : kit === 'pam' ? <PamKit /> : kit === 'lc' ? <LcKit /> : kit === 'mf' ? <MfKit /> : kit === 'fsk' ? <FskKit /> : kit === 'dsss' ? <DsssKit /> : kit === 'pcm' ? <PcmKit /> : <AmKit />;
 }
 const CAMERA = { position: [170, 640, 1150] as [number, number, number], fov: 32, near: 2, far: 9000 };
 const WALL_INFO = 'Switchboard on the wall behind the bench. Put the kit\'s mains plug in the socket, then switch the kit ON with its own toggle.';
+
+/** Film mode: a dark floor with a faint sheen instead of the room, a rim light from behind, and a soft studio reflection for the metal parts. */
+function FilmStage() {
+  const { gl, scene } = useThree();
+  useEffect(() => {
+    const pm = new THREE.PMREMGenerator(gl), env = pm.fromScene(new RoomEnvironment(), 0.04).texture;
+    scene.environment = env;
+    scene.environmentIntensity = 0.45;
+    return () => { scene.environment = null; env.dispose(); pm.dispose(); };
+  }, [gl, scene]);
+  return (
+    <>
+      <mesh position={[0, DESK_Y - 0.5, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <planeGeometry args={[9000, 9000]} />
+        <meshStandardMaterial color="#0a0a0b" roughness={0.72} metalness={0} />
+      </mesh>
+      <directionalLight position={[-200, 500, -1400]} intensity={1.6} color="#dfe8ff" />
+    </>
+  );
+}
 
 /** Everything inside the Canvas: memoised and prop-less, so overlay re-renders never re-render the 3D parts. */
 const Scene3D = memo(function Scene3D() {
   return (
     <>
-      <color attach="background" args={['#cdbfb1']} />
+      <color attach="background" args={[FILM ? '#000000' : '#cdbfb1']} />
       <hemisphereLight args={['#fff6ec', '#6b5a4a', 0.9]} />
       <directionalLight position={[300, 1400, 700]} intensity={1.7} castShadow
         shadow-mapSize={[2048, 2048]} shadow-camera-left={-1100} shadow-camera-right={1100} shadow-camera-top={700} shadow-camera-bottom={-700} shadow-camera-far={4000} shadow-bias={-0.0003} />
@@ -171,8 +197,7 @@ const Scene3D = memo(function Scene3D() {
       <pointLight position={[0, 900, 300]} intensity={2.4e5} distance={3000} decay={2} color="#fff4e6" />
       <Suspense fallback={null}>
         <group onClick={onSceneClick}>
-          <StaticBatch><Room /></StaticBatch>
-          <WallBoard pos={WALL_POS} info={WALL_INFO} />
+          {FILM ? <FilmStage /> : <><StaticBatch><Room /></StaticBatch><WallBoard pos={WALL_POS} info={WALL_INFO} /></>}
           <KitOnBench />
           <Tds1002 />
           <BenchCords />
@@ -198,8 +223,8 @@ export function PceLab() {
   const wrap = useRef<HTMLDivElement>(null);
   const gpu = gpuInfo();
   const hoverCtx = useMemo(() => ({ hover: setHover }), []);
-  const gl = useMemo(() => ({ antialias: !gpu.software, powerPreference: 'high-performance' as const, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.0 }), [gpu.software]);
-  const dpr = useMemo<number | [number, number]>(() => (gpu.software || perf ? 1 : [1, 2]), [gpu.software, perf]);
+  const gl = useMemo(() => ({ antialias: FILM || !gpu.software, powerPreference: 'high-performance' as const, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.0 }), [gpu.software]);
+  const dpr = useMemo<number | [number, number]>(() => (FILM ? window.devicePixelRatio : gpu.software || perf ? 1 : [1, 2]), [gpu.software, perf]);
   // the shared movement keys stand aside only for the EP lab's computer view, which this lab does not have
   useEffect(() => { useBench.setState({ view: 'lab' }); scopeLive.acq = null; }, []);
   return (
@@ -208,10 +233,11 @@ export function PceLab() {
       onPointerMove={(e) => { const r = wrap.current!.getBoundingClientRect(); pointer.x = e.clientX - r.left; pointer.y = e.clientY - r.top; }}
       onPointerDown={() => { audio.unlock(); if (isTyping(document.activeElement)) (document.activeElement as HTMLElement).blur(); }}>
       <BoardCtx.Provider value={hoverCtx}>
-        <Canvas shadows={!gpu.software && !perf} dpr={dpr} camera={CAMERA} gl={gl}>
+        <Canvas shadows={FILM || (!gpu.software && !perf)} dpr={dpr} camera={CAMERA} gl={gl}>
           <Scene3D />
         </Canvas>
       </BoardCtx.Provider>
+      {!FILM && <>
       <div className="board-toolbar">
         <div className={`seg view-seg ${viewsOpen ? 'open' : ''}`}>
           <button className="seg-btn view-toggle" onClick={() => setViewsOpen(!viewsOpen)} aria-expanded={viewsOpen} title={viewsOpen ? 'Hide views' : 'Show all views'}>
@@ -227,12 +253,13 @@ export function PceLab() {
           </button>
         </div>
       </div>
-      {kit === 'fm' ? <FmGuide /> : kit === 'pam' ? <PamGuide /> : kit === 'lc' ? <LcGuide /> : kit === 'mf' ? <MfGuide /> : kit === 'fsk' ? <FskGuide /> : kit === 'dsss' ? <DsssGuide /> : <AmGuide />}
+      {kit === 'fm' ? <FmGuide /> : kit === 'pam' ? <PamGuide /> : kit === 'lc' ? <LcGuide /> : kit === 'mf' ? <MfGuide /> : kit === 'fsk' ? <FskGuide /> : kit === 'dsss' ? <DsssGuide /> : kit === 'pcm' ? <PcmGuide /> : <AmGuide />}
       {gpu.software && <GpuNotice renderer={gpu.renderer} />}
       <CarryHint />
       <Toast />
       <div className="board-hint">WASD / arrows: move · Q/E: down/up · Shift: faster · drag: orbit · right-drag: pan · scroll: zoom · click probes and cords to move them · drag or scroll a pot to turn it</div>
       {hover && <HoverTip hover={hover} wrap={wrap} />}
+      </>}
     </div>
   );
 }
