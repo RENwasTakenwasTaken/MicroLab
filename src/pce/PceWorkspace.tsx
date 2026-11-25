@@ -8,7 +8,7 @@ import { Icon } from '../ui/icons.tsx';
 import { LabSheet } from './LabSheet.tsx';
 import { getPceExperiment } from './experiments.ts';
 import { kitPowered, resetPceBench, usePce } from './store.ts';
-import { FILM } from './film.ts';
+import { useFilmBare } from '../three/film.tsx';
 
 const PceLab = lazy(() => import('./PceLab.tsx').then((m) => ({ default: m.PceLab })));
 
@@ -52,12 +52,12 @@ export function PceWorkspace({ expId }: { expId: string }) {
   const narrow = useNarrow();
   const leftOpen = useLab((s) => s.leftOpen);
   const [tab, setTab] = useState<'bench' | 'sheet'>('bench');
+  const bare = useFilmBare();
   // every visit starts with a fresh bench, as at the start of a lab turn
   useEffect(() => { resetPceBench(expId); }, [expId]);
-  if (FILM) return <div style={{ position: 'fixed', inset: 0, background: '#000' }}><Bench /></div>;
   if (narrow) {
     return (
-      <div className="ws">
+      <div className={`ws ${bare ? 'film-bare' : ''}`}>
         <PceTopBar expId={expId} />
         <div className="ws-mobile">
           <div className={tab === 'sheet' ? 'mshow' : 'mhide'}><div className="panel"><div className="panel-body"><LabSheet expId={expId} /></div></div></div>
@@ -70,7 +70,7 @@ export function PceWorkspace({ expId }: { expId: string }) {
     );
   }
   return (
-    <div className="ws">
+    <div className={`ws ${bare ? 'film-bare' : ''}`}>
       <PceTopBar expId={expId} />
       <div className={`ws-main ws-stage ${leftOpen ? 'l-open' : ''}`}>
         <div className="panel"><div className="panel-body" style={{ overflow: 'hidden' }}><Bench /></div></div>

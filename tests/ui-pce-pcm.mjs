@@ -34,7 +34,9 @@ const knob = (id, v) => st((s, k, x) => s.getState().setKnob(k, x), id, v);
 const scope = (p) => st((s, q) => s.getState().setScope(q), p);
 const chans = (v1, p1, v2, p2) => st((s, a) => s.getState().scope.ch.map((c, i) => ({ ...c, vdiv: a[i * 2], pos: a[i * 2 + 1] })), [v1, p1, v2, p2]);
 const trig = (source, level) => scope({ trig: { source, slope: 'rise', level, mode: 'auto' } });
-const acq = async () => { await sleep(700); return page.evaluate(() => {
+// a record taken while a probe or its ground clip was being moved can be stale: retry until the scope triggers
+const acq = async () => { let a = null; for (let i = 0; i < 3 && !a?.triggered; i++) a = await acq1(); return a; };
+const acq1 = async () => { await sleep(700); return page.evaluate(() => {
   const a = window.__pceScope.acq;
   const stat = (v) => { if (!v) return null; let lo = Infinity, hi = -Infinity; for (const x of v) { lo = Math.min(lo, x); hi = Math.max(hi, x); } return { lo, hi }; };
   return a ? { ch1: stat(a.ch[0]), ch2: stat(a.ch[1]), triggered: a.triggered, f: a.trigFreq } : null;

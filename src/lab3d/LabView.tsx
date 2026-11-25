@@ -13,12 +13,13 @@ import { useFrame, useLab } from '../app/store.ts';
 import { audio } from '../app/audio.ts';
 import { Icon } from '../ui/icons.tsx';
 import { Room } from './Room.tsx';
+import { FILM, FilmStage, useFilmBare } from '../three/film.tsx';
 import { Mains } from './Mains.tsx';
 import { Computer, screenFrame } from './Computer.tsx';
 import { Instruments, useDmmProblem } from './Instruments.tsx';
 import { BenchCables, CarryController, SocketTargets, carryPos } from './Cables.tsx';
 import { CodingOverlay, useScreenRect } from './CodingOverlay.tsx';
-import { DESK_Y, DMM, SCOPE, SOCKET, rotateY } from './world.ts';
+import { DESK_Y, DMM, SCOPE, SOCKET, WALLBOARD, rotateY } from './world.ts';
 import { getExperiment } from '../experiments/experiments.ts';
 import { FRC_LABEL } from '../three/layout.ts';
 import type { FrcTarget, PicBoardConfig } from '../sim/board/types.ts';
@@ -609,7 +610,7 @@ const CAMERA = { position: [10, 980, 1420] as [number, number, number], fov: 32,
 const Scene3D = memo(function Scene3D() {
   return (
     <>
-          <color attach="background" args={['#cdbfb1']} />
+          <color attach="background" args={[FILM ? '#000000' : '#cdbfb1']} />
           <hemisphereLight args={['#fff6ec', '#6b5a4a', 0.9]} />
           <directionalLight position={[300, 1400, 700]} intensity={1.7} castShadow
             shadow-mapSize={[2048, 2048]} shadow-camera-left={-1100} shadow-camera-right={1100} shadow-camera-top={700} shadow-camera-bottom={-700} shadow-camera-far={4000} shadow-bias={-0.0003} />
@@ -617,7 +618,8 @@ const Scene3D = memo(function Scene3D() {
           <pointLight position={[0, 900, 300]} intensity={2.4e5} distance={3000} decay={2} color="#fff4e6" />
           <Suspense fallback={null}>
             <group onClick={onSceneClick}>
-              <StaticBatch><Room /></StaticBatch>
+              {/* film mode: the black stage, with a black wall where the switchboard hangs */}
+              {FILM ? <FilmStage backdrop={WALLBOARD.pos[2] - 2} /> : <StaticBatch><Room /></StaticBatch>}
               <BoardScene />
               <StaticBatch><Computer /></StaticBatch>
               <Mains />
@@ -641,12 +643,13 @@ export function LabView({ expId }: { expId: string }) {
   const view = useBench((s) => s.view);
   const [viewsOpen, setViewsOpen] = useState(false);
   const perf = useLab((s) => s.perfMode);
+  const bare = useFilmBare();
   const wrap = useRef<HTMLDivElement>(null);
   const gpu = gpuInfo();
   // a new context value would re-render every hoverable 3D part
   const hoverCtx = useMemo(() => ({ hover: setHover }), []);
-  const gl = useMemo(() => ({ antialias: !gpu.software, powerPreference: 'high-performance' as const, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.0 }), [gpu.software]);
-  const dpr = useMemo<number | [number, number]>(() => (gpu.software || perf ? 1 : [1, 2]), [gpu.software, perf]);
+  const gl = useMemo(() => ({ antialias: FILM || !gpu.software, powerPreference: 'high-performance' as const, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.0 }), [gpu.software]);
+  const dpr = useMemo<number | [number, number]>(() => (FILM ? window.devicePixelRatio : gpu.software || perf ? 1 : [1, 2]), [gpu.software, perf]);
 
   return (
     <div className="board-view lab-view" ref={wrap}
@@ -658,11 +661,13 @@ export function LabView({ expId }: { expId: string }) {
         if (isTyping(document.activeElement)) (document.activeElement as HTMLElement).blur();
       }}>
       <BoardCtx.Provider value={hoverCtx}>
-        <Canvas shadows={!gpu.software && !perf} dpr={dpr} camera={CAMERA} gl={gl}>
+        <Canvas shadows={FILM || (!gpu.software && !perf)} dpr={dpr} camera={CAMERA} gl={gl}>
           <Scene3D />
         </Canvas>
       </BoardCtx.Provider>
 
+      <WorkflowWatcher expId={expId} />
+      {!bare && <>
       <div className="board-toolbar">
         <div className={`seg view-seg ${viewsOpen ? 'open' : ''}`}>
           <button className="seg-btn view-toggle" onClick={() => setViewsOpen(!viewsOpen)} aria-expanded={viewsOpen} title={viewsOpen ? 'Hide views' : 'Show all views'}>
@@ -680,7 +685,6 @@ export function LabView({ expId }: { expId: string }) {
           </button>
         </div>
       </div>
-      <WorkflowWatcher expId={expId} />
       <WorkflowGuide expId={expId} onPc={view === 'computer'} />
       {gpu.software && <GpuNotice renderer={gpu.renderer} />}
       <CarryHint />
@@ -688,6 +692,7 @@ export function LabView({ expId }: { expId: string }) {
       <CodingOverlay expId={expId} />
       {view !== 'computer' && <div className="board-hint">WASD / arrows: move · Q/E: down/up · Shift: faster · drag: orbit · right-drag: pan · scroll: zoom · click the monitor to code · click plugs, probes and wires to move them · Shift-click a board button to hold it</div>}
       {hover && view !== 'computer' && <HoverTip hover={hover} wrap={wrap} />}
+      </>}
     </div>
   );
 }

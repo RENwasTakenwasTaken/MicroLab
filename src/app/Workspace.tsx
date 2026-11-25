@@ -17,6 +17,7 @@ import { ExperimentPanel } from '../lab/ExperimentPanel.tsx';
 import { HardwarePanel } from '../lab/HardwarePanel.tsx';
 import { VirtualTarget51 } from '../lab/VirtualTarget51.tsx';
 import { Icon } from '../ui/icons.tsx';
+import { useFilmBare } from '../three/film.tsx';
 
 const LabView = lazy(() => import('../lab3d/LabView.tsx').then((m) => ({ default: m.LabView })));
 
@@ -131,6 +132,7 @@ export function Workspace({ expId }: { expId: string }) {
   const bottomOpen = useLab((s) => s.bottomOpen);
   const [mobileTab, setMobileTab] = useState<'code' | 'board' | 'output' | 'debug' | 'lab'>('board');
   const coding = useBench((s) => s.view === 'computer');
+  const bare = useFilmBare();
   useEffect(() => { openExperiment(expId); }, [expId]);
   // "How to fix this?" on the 3D LCD's fault overlay asks for the Output pane (a tab on narrow screens)
   useEffect(() => {
@@ -151,7 +153,7 @@ export function Workspace({ expId }: { expId: string }) {
     // in the 3D lab, code is written on the lab computer inside the bench
     const tabs = ([['lab', 'Lab', 'flask'], ['code', 'Code', 'file'], ['board', keilSim ? 'Board' : 'Bench', 'board'], ['output', 'Output', 'terminal'], ['debug', 'Debug', 'bug']] as const).filter((t) => keilSim || t[0] !== 'code');
     return (
-      <div className="ws">
+      <div className={`ws ${bare ? 'film-bare' : ''}`}>
         <TopBar expId={expId} />
         <div className="ws-mobile">
           <div className={mobileTab === 'lab' ? 'mshow' : 'mhide'}><LeftPanel expId={expId} /></div>
@@ -169,7 +171,7 @@ export function Workspace({ expId }: { expId: string }) {
 
   const set = useLab.getState().set;
   return (
-    <div className="ws">
+    <div className={`ws ${bare ? 'film-bare' : ''}`}>
       <TopBar expId={expId} />
       <div className={`ws-main ws-stage ${leftOpen ? 'l-open' : ''} ${rightOpen ? 'r-open' : ''}`}>
         {keilSim ? (

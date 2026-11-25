@@ -6,7 +6,6 @@ import { Suspense, memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { audio } from '../app/audio.ts';
 import { useBench } from '../app/bench.ts';
 import { useLab } from '../app/store.ts';
@@ -47,7 +46,7 @@ import { BenchCords, CarryController, SocketTargets, carryPos } from './Cords.ts
 import { scopeLive } from './scope/menus.ts';
 import { Tds1002 } from './scope/Tds1002.tsx';
 import { usePce, type PceView } from './store.ts';
-import { FILM } from './film.ts';
+import { FILM, FilmStage, useFilmBare } from '../three/film.tsx';
 import { DMM, KIT_POS, SCOPE, WALL_POS, scopePoint } from './world.ts';
 import '../three/board.css';
 import '../lab3d/lab.css';
@@ -165,26 +164,6 @@ function KitOnBench() {
 const CAMERA = { position: [170, 640, 1150] as [number, number, number], fov: 32, near: 2, far: 9000 };
 const WALL_INFO = 'Switchboard on the wall behind the bench. Put the kit\'s mains plug in the socket, then switch the kit ON with its own toggle.';
 
-/** Film mode: a dark floor with a faint sheen instead of the room, a rim light from behind, and a soft studio reflection for the metal parts. */
-function FilmStage() {
-  const { gl, scene } = useThree();
-  useEffect(() => {
-    const pm = new THREE.PMREMGenerator(gl), env = pm.fromScene(new RoomEnvironment(), 0.04).texture;
-    scene.environment = env;
-    scene.environmentIntensity = 0.45;
-    return () => { scene.environment = null; env.dispose(); pm.dispose(); };
-  }, [gl, scene]);
-  return (
-    <>
-      <mesh position={[0, DESK_Y - 0.5, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[9000, 9000]} />
-        <meshStandardMaterial color="#0a0a0b" roughness={0.72} metalness={0} />
-      </mesh>
-      <directionalLight position={[-200, 500, -1400]} intensity={1.6} color="#dfe8ff" />
-    </>
-  );
-}
-
 /** Everything inside the Canvas: memoised and prop-less, so overlay re-renders never re-render the 3D parts. */
 const Scene3D = memo(function Scene3D() {
   return (
@@ -220,6 +199,7 @@ export function PceLab() {
   const [viewsOpen, setViewsOpen] = useState(false);
   const view = usePce((s) => s.view);
   const perf = useLab((s) => s.perfMode);
+  const bare = useFilmBare();
   const wrap = useRef<HTMLDivElement>(null);
   const gpu = gpuInfo();
   const hoverCtx = useMemo(() => ({ hover: setHover }), []);
@@ -237,7 +217,7 @@ export function PceLab() {
           <Scene3D />
         </Canvas>
       </BoardCtx.Provider>
-      {!FILM && <>
+      {!bare && <>
       <div className="board-toolbar">
         <div className={`seg view-seg ${viewsOpen ? 'open' : ''}`}>
           <button className="seg-btn view-toggle" onClick={() => setViewsOpen(!viewsOpen)} aria-expanded={viewsOpen} title={viewsOpen ? 'Hide views' : 'Show all views'}>

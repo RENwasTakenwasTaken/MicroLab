@@ -306,3 +306,9 @@ table.conn td { font-size: 11.5px; vertical-align: top; padding-top: 4px; paddin
 .lab-name span { display: block; margin-top: 2px; font-size: 13px; font-weight: 500; letter-spacing: 0; color: var(--fg-2); }
 .lab-text { margin: 0; color: var(--fg-1); font-size: 13.5px; line-height: 1.55; max-width: 46ch; }
 .lab-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; padding-right: 34px; }
+
+/* film mode (development only, src/three/film.tsx): the interface around the 3D view hidden; backquote brings it back */
+.ws.film-bare { background: #000; }
+.ws.film-bare .topbar, .ws.film-bare .pane-handle, .ws.film-bare .glass-pane, .ws.film-bare .bottom-dock, .ws.film-bare .mtabs { display: none !important; }
+/* labels drawn over the 3D view (drei <Html>: USB status, fault HUDs, HELD badges) sit beside the canvas */
+.ws.film-bare div:has(> canvas) ~ div { display: none !important; }
